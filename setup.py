@@ -31,6 +31,7 @@ setup(
             "auto = intake_io.source.AutoSource",
             "bioformats = intake_io.source.BioformatsSource",
             "dicom = intake_io.source.DicomSource",
+            "dicomzip = intake_io.source.DicomZipSource",
             "directory = intake_io.source.DirSource",
             "filepattern = intake_io.source.FilePatternSource",
             "flywheel = intake_io.source.FlywheelSource",
