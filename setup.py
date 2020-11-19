@@ -24,9 +24,8 @@ setup(
         "pyklb",
         "pynrrd",
         "xarray",
-        "xmltodict",
-        "zipfile"
-      ]
+        "xmltodict"
+      ],
     entry_points={
         "intakedrivers": [
             "auto = intake_io.source.AutoSource",
