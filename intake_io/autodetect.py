@@ -27,7 +27,7 @@ def autodetect(uri: str) -> intake.source.base.DataSource:
         return source.DicomZipSource(uri)
     elif lext == ".klb":
         return source.KlbSource(uri)
-    elif luri.endswith(".ome.tif") or luri.endswith("ome.tiff") or lext not in (".tif", ".tiff", ".png", ".jpg", ".gif", ".mp4"):
-        return source.BioformatsSource(uri)
-    else:
+    elif lext in (".png", ".jpg", ".gif", ".mp4"):
         return source.ImageIOSource(uri)
+    else:
+        return source.BioformatsSource(uri)
