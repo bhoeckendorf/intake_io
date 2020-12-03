@@ -185,6 +185,8 @@ class FilePattern:
             return src.discover()
 
     def _get_rows(self, ix: tuple):
+        if not isinstance(ix, tuple):
+            ix = (ix,)
         rows = self.files[self.files[self.axes_outer[0]] == ix[0]]
         for a, i in zip(self.axes_outer[1:len(ix)-1], ix[1:]):
             rows = rows[rows[a] == i]
