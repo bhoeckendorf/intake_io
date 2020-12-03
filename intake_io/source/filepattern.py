@@ -36,6 +36,8 @@ class FilePattern:
             out = self.get_file_metadata()["metadata"]["axes"]
             if out is None:
                 return get_axes(self.shape_inner)
+            else:
+                return out
         except KeyError:
             return get_axes(self.shape_inner)
 
