@@ -254,6 +254,14 @@ class FilePatternSource(intake.source.base.DataSource):
             schema["extra_metadata"]["coords"].update(self._files.coords)
         except (AttributeError, KeyError):
             schema["extra_metadata"]["coords"] = self._files.coords
+        
+        # ad-hoc for Anna
+        try:
+            spacing_z = float(schema["extra_metadata"]["fileheader"]["OME"]["Image"]["Pixels"]["@PhysicalSizeZ"])
+            schema["extra_metadata"]["spacing"] = tuple([spacing_z, *schema["extra_metadata"]["spacing"]])
+        except Exception:
+            pass
+        
         return schema
 
     def _get_partition(self, i) -> np.ndarray:
