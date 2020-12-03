@@ -36,16 +36,13 @@ class BioformatsSource(intake.source.base.DataSource):
             if size > 1:
                 axes += d.lower()
                 shape.append(size)
-                if d in "ZYX":
-                    try:
-                        spacing.append(float(pixmeta[f"@PhysicalSize{d}"]))
-                    except Exception:
-                        break
+            if d in "ZYX":
+                try:
+                    spacing.append(float(pixmeta[f"@PhysicalSize{d}"]))
+                except Exception:
+                    break
         shape = tuple(shape)
-        if len(spacing) != np.sum([d in axes for d in "zyx"]):
-            spacing = None
-        else:
-            spacing = tuple(spacing)
+        spacing = tuple(spacing)
 
         # parse channel names
         try:
