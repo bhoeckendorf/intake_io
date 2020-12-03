@@ -34,10 +34,11 @@ class FilePattern:
     def axes_inner(self) -> str:
         try:
             out = self.get_file_metadata()["metadata"]["axes"]
-            if out is None:
-                return get_axes(self.shape_inner)
         except KeyError:
+            out = None
+        if out is None:
             return get_axes(self.shape_inner)
+        return out
 
     @property
     @lru_cache(maxsize=16)
