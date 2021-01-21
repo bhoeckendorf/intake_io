@@ -36,7 +36,7 @@ class ImageIOSource(intake.source.base.DataSource):
         #    self._img = np.transpose(self._img, (2,0,1))
 
         fileheader = self._reader.get_meta_data()
-        if fileheader["is_ome"]:
+        if "is_ome" in fileheader and fileheader["is_ome"]:
             s = BioformatsSource._static_get_schema(fileheader["description"])
             s.npartitions = self._reader.get_length()
             return s
