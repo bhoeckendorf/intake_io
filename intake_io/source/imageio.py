@@ -1,8 +1,9 @@
 import numpy as np
 import imageio
 import intake
-from typing import Optional
+from typing import Any, Optional
 from .bioformats import BioformatsSource
+from ..util import *
 
 
 class ImageIOSource(intake.source.base.DataSource):
@@ -75,3 +76,23 @@ class ImageIOSource(intake.source.base.DataSource):
     def _close(self):
         if self._reader is not None:
             self._reader.close()
+
+
+def save_tif(image: Any, uri: str, compress: bool):
+    if isinstance(image, xr.Dataset):
+        if len(image) == 1:
+            save_tif(image[list(image.keys())[0]], uri, compress)
+        else:
+            for k in image.keys():
+                uri_key = re.sub(".tif{1,2}", f".{k}.tif", uri, flags=re.IGNORECASE)
+                save_tif(image[k], uri_key, compress)
+        return
+
+    # todo: handle RGB
+    mode = "v"
+    if image.ndim == 2:
+        mode = "i"
+    with imageio.get_writer(uri, mode) as writer:
+        if compress:
+            writer.set_meta_data(dict(compress=4))
+        writer.append_data(to_numpy(image))

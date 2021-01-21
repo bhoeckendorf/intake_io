@@ -2,7 +2,8 @@ import re
 import numpy as np
 import nibabel
 import intake
-from typing import Optional
+from typing import Any, Optional
+from ..util import *
 
 # ToDos:
 # Reversing the axes order to zyx invalidates the affine matrix in the header.
@@ -89,3 +90,24 @@ class NiftiSource(intake.source.base.DataSource):
 
     def _close(self):
         pass
+
+
+def save_nifti(image: Any, uri: str, compress: bool):
+    if isinstance(image, xr.Dataset):
+        if len(image) == 1:
+            save_nifti(image[list(image.keys())[0]], uri, compress)
+        else:
+            for k in image.keys():
+                uri_key = re.sub(".nii.gz", f".{k}.nii.gz", uri, flags=re.IGNORECASE)
+                save_nifti(image[k], uri_key, compress)
+        return
+
+    h = nibabel.Nifti2Header()
+    h.set_data_shape(image.shape[::-1])
+    h.set_data_dtype(image.dtype)
+    h.get("pixdim")[1:1+image.ndim] = get_spacing(image)[::-1]
+    ni = nibabel.Nifti2Image(
+        to_numpy(image).T,
+        affine=np.eye(image.ndim+1, image.ndim+1),
+        header=h)
+    nibabel.save(ni, uri)

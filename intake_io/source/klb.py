@@ -1,7 +1,8 @@
 import numpy as np
 import pyklb as klb
 import intake
-from typing import Optional
+from typing import Any, Optional
+from ..util import *
 
 
 class KlbSource(intake.source.base.DataSource):
@@ -57,3 +58,35 @@ class KlbSource(intake.source.base.DataSource):
 
     def _close(self):
         pass
+
+
+def save_klb(image: Any, uri: str, compress: bool):
+    if isinstance(image, xr.Dataset):
+        if len(image) == 1:
+            save_klb(image[list(image.keys())[0]], uri, compress)
+        else:
+            for k in image.keys():
+                uri_key = re.sub(".klb", f".{k}.klb", uri, flags=re.IGNORECASE)
+                save_klb(image[k], uri_key, compress)
+        return
+
+    assert image.ndim < 6
+
+    shape_out = []
+    spacing_out = []
+    for i, d in enumerate("tczyx"):
+        if not d in image.dims:
+            if len(shape_out) == 0:
+                continue
+            shape_out.append(1)
+            spacing_out.append(1.0)
+        else:
+            shape_out.append(image.dims[d])
+            spacing_out.append(image.coords[d][1] - image.coords[d][0])
+
+    klb.writefull(
+        to_numpy(image).reshape(shape_out),
+        uri,
+        pixelspacing_tczyx = np.asarray(spacing_out, dtype=np.float32),
+        compression = "bzip" if compress else "none"
+    )

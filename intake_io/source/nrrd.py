@@ -1,7 +1,9 @@
 import numpy as np
+import xarray as xr
+from typing import Any, Optional
 import nrrd
 import intake
-from typing import Optional
+from ..util import *
 
 
 class NrrdSource(intake.source.base.DataSource):
@@ -87,3 +89,52 @@ class NrrdSource(intake.source.base.DataSource):
 
     def _close(self):
         pass
+
+
+def save_nrrd(image: Any, uri: str, compress: bool):
+    if isinstance(image, xr.Dataset):
+        if len(image) == 1:
+            save_nrrd(image[list(image.keys())[0]], uri, compress)
+        else:
+            for k in image.keys():
+                uri_key = re.sub(".nrrd", f".{k}.nrrd", uri, flags=re.IGNORECASE)
+                save_nrrd(image[k], uri_key, compress)
+        return
+
+    header = dict(encoding="gzip" if compress else "raw")
+    header["space dimension"] = image.ndim
+
+    try:
+        header["labels"] = list(image.attrs["axes"])[::-1]
+        header["kinds"] = []
+        for i in header["labels"]:
+            if i in "zyx":
+                header["kinds"].append("space")
+            elif i == "c":
+                header["kinds"].append("scalar")
+            elif i == "t":
+                header["kinds"].append("time")
+            else:
+                header["kinds"].append("none")
+    except (AttributeError, KeyError, TypeError):
+        pass
+
+    try:
+        #header["units"] = list([image.attrs["spacing_units"][d] for d in header["labels"]])
+        header["space units"] = list([image.attrs["spacing_units"][d] for d in header["labels"]])
+    except (AttributeError, KeyError):
+        pass
+
+    spacing = get_spacing(image)
+    if spacing is not None:
+        #header["spacings"] = spacing[::-1]
+        header["space directions"] = np.eye(len(spacing), len(spacing), dtype=np.float)
+        for i, v in enumerate(spacing[::-1]):
+            header["space directions"][i, i] = v
+
+    try:
+        header["channels"] = list(image.coords["c"])
+    except KeyError:
+        pass
+
+    nrrd.write(uri, to_numpy(image), header, compression_level=4, index_order="C")
