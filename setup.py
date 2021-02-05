@@ -9,7 +9,7 @@ setup(
     author_email="burkhard.hoeckendorf@pm.me",
     url="https://github.com/bhoeckendorf/intake_io",
     license="MIT",
-    packages=find_packages(exclude=("tests", "docs")),
+    packages=find_packages(exclude=("tests*", "docs*")),
     install_requires=[
         "bioformats",
         "dask",
