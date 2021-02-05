@@ -262,6 +262,16 @@ def to_xarray(
     return to_xarray(to_numpy(image), get_spacing(image), axes, coords, name, attrs)
 
 
+def get_catalog(sources, filepath=None):
+    yml = [sources[0].yaml(), *[i.yaml().replace("sources:\n", "") for i in sources[1:]]]
+    yml = "\n".join(yml)
+    if filepath is not None:
+        assert not os.path.exists(filepath)
+        with open(filepath, "w") as f:
+            f.write(yml)
+    return yml
+
+
 def clean_yaml(data: Dict[str, Any], rename_to: Optional[str] = None) -> Dict[str, Any]:
     """
     Utility function to clean YAML representation of intake source.
