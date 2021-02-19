@@ -7,7 +7,7 @@ def find_samples(input_dir, channel_tag='_C', z_position_tag='_z'):
     tags = {'c': channel_tag, 'z': z_position_tag}
     
     # list all files in the input folder
-    src = source.FilePatternSource(Path(input_dir), axis_tags=tags.copy(), 
+    src = source.FilePatternSource(input_dir, axis_tags=tags.copy(), 
                                              extensions=[".tif"], include_filters=[], exclude_filters=[])
     df = src._files.files
     
@@ -43,6 +43,6 @@ def find_samples(input_dir, channel_tag='_C', z_position_tag='_z'):
     # iterate over sample names and return intake_io sources that include each of these samples:
     sources = []
     for fn in fns:
-        sources.append(source.FilePatternSource(Path(input_dir), axis_tags=tags.copy(), 
+        sources.append(source.FilePatternSource(input_dir, axis_tags=tags.copy(), 
                                                           extensions=[".tif"], include_filters=[fn], exclude_filters=[]))
     return sources
