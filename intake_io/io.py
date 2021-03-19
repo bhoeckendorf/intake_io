@@ -15,7 +15,7 @@ def imload(uri: str, partition: Any = None, metadata_only: bool = False) -> xr.D
     if isinstance(uri, intake.DataSource):
         if metadata_only:
             return uri.discover()
-        return to_xarray(uri, partition=partition)
+        return xr.Dataset({"image": to_xarray(uri, partition=partition)})
     elif isinstance(uri, intake.catalog.entry.CatalogEntry):
         return imload(uri.get(), partition, metadata_only)
     with autodetect(uri) as src:
