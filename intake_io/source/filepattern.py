@@ -21,7 +21,8 @@ class FilePattern:
             extensions: list,
             include_filters: list = [],
             exclude_filters: list = [],
-            ixs: Optional[list] = None
+            ixs: Optional[list] = None,
+            source: intake.DataSource = None
             ):
         self.folder = folder
         self.axis_tags = axis_tags
@@ -29,6 +30,7 @@ class FilePattern:
         self.include_filters = include_filters
         self.exclude_filters = exclude_filters
         self.ixs = ixs
+        self.source = source
 
     @property
     def axes_inner(self) -> str:
@@ -181,8 +183,12 @@ class FilePattern:
     @lru_cache(maxsize=16)
     def get_file_metadata(self):
         file = self.files.iloc[0]["file"]
-        with autodetect(file) as src:
-            return src.discover()
+        if self.source is None:
+            with autodetect(file) as src:
+                return src.discover()
+        else:
+            with self.source(file) as src:
+                return src.discover()
 
     def _get_rows(self, ix: tuple):
         if not isinstance(ix, tuple):
@@ -197,8 +203,12 @@ class FilePattern:
             row = self._get_rows(i)
             assert row.shape[0] == 1
             i = row["file"]
-        with autodetect(i) as src:
-            return src.read()
+        if self.source is None:
+            with autodetect(i) as src:
+                return src.read()
+        else:
+            with self.source(i) as src:
+                return src.read()
 
     def load_partition(self, i):
         ix = self.files[self.axes_outer[0]].unique()[i]
@@ -236,10 +246,10 @@ class FilePatternSource(intake.source.base.DataSource):
             srcs.append(src)
         return srcs
 
-    def __init__(self, folder, axis_tags, extensions, include_filters=[], exclude_filters=[], ixs=None, metadata=None):
+    def __init__(self, folder, axis_tags, extensions, include_filters=[], exclude_filters=[], ixs=None, metadata=None, source: intake.DataSource = None):
         super().__init__(metadata=metadata)
         self.uri = folder
-        self._files = FilePattern(folder, axis_tags, extensions, include_filters, exclude_filters, ixs)
+        self._files = FilePattern(folder, axis_tags, extensions, include_filters, exclude_filters, ixs, source)
 
     def _get_schema(self) -> intake.source.base.Schema:
         schema = intake.source.base.Schema(
