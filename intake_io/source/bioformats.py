@@ -39,8 +39,8 @@ class BioformatsSource(intake.source.base.DataSource):
             if d in "ZYX":
                 try:
                     spacing.append(float(pixmeta[f"@PhysicalSize{d}"]))
-                except Exception:
-                    break
+                except KeyError:
+                    pass
         shape = tuple(shape)
         spacing = tuple(spacing)
 
