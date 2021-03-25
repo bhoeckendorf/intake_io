@@ -20,6 +20,15 @@ def imload(uri: str, partition: Any = None, metadata_only: bool = False) -> xr.D
         return imload(uri.get(), partition, metadata_only)
     with autodetect(uri) as src:
         return imload(src, partition, metadata_only)
+    
+def imload_with_coords(uri: str, coords: dict, partition: Any = None) -> xr.Dataset:
+    img = imload(uri, partition=partition)
+    for key in coords.keys():
+        if coords[key] is not None:
+            img.coords[key] = np.arange(len(img[key])) * coords[key]
+        else:
+            img.coords[key] = np.arange(len(img[key]))
+    return img
 
 
 def imsave(image: Any, uri: str, compress: bool = True):
