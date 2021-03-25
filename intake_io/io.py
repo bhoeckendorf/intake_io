@@ -1,5 +1,6 @@
 import numpy as np
 import xarray as xr
+import zarr
 import intake
 import re
 from typing import Any, Optional
