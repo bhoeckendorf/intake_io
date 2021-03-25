@@ -92,7 +92,7 @@ def save_tif(image: Any, uri: str, compress: bool):
     mode = "v"
     if image.ndim == 2:
         mode = "i"
-    with imageio.get_writer(uri, mode) as writer:
+    with imageio.get_writer(uri, mode=mode) as writer:
         if compress:
             writer.set_meta_data(dict(compress=4))
         writer.append_data(to_numpy(image))
