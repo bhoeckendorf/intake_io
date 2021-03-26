@@ -1,0 +1,6 @@
+name: sphinx
+dependencies:
+  - recommonmark
+  - sphinx-autoapi
+  - sphinx-autobuild
+  - sphinx_rtd_theme
