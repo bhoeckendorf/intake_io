@@ -41,7 +41,7 @@ class IntakeDataset:
         if self._num_partitions[item_ix] > 1:
             return {**dict(sample_index=i), **self._loader(self._items[item_ix], partition_ix)}
         else:
-            return {**dict(sample_index=i), **self._loader(self._items[item_ix])}
+            return {**dict(sample_index=i), **self._loader(self._items[item_ix], None)}
 
     def close(self):
         for item in self._items:
