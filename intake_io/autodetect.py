@@ -1,23 +1,23 @@
 import os
+
 import intake
+
 from . import source
 
 
-def autodetect(uri: str) -> intake.source.base.DataSource:
+def autodetect(uri: str) -> intake.source.DataSource:
     """
     Autodetect intake source given URI.
 
-    Parameters
-    ----------
-    uri : str
-        URI (e.g. file system path or URL)
+    If no other source is more suitable, it returns an instance of :class:`intake_io.source.ImageIOSource`, which uses
+    `imageio <https://github.com/imageio/imageio>`_.
 
-    Returns
-    -------
-    intake.source.base.DataSource
-        If no other source is more suitable, it is of type
-        intake_io.source.ImageIOSource, which uses imageio. This function
-        doesn't check whether the data can actually be loaded.
+    This function doesn't check whether the data can actually be loaded.
+
+    :param uri:
+        URI (e.g. file system path or URL)
+    :return:
+        Data source
     """
     luri = uri.lower()
     lext = os.path.splitext(luri)[-1]
@@ -31,7 +31,8 @@ def autodetect(uri: str) -> intake.source.base.DataSource:
         return source.DicomZipSource(uri)
     elif lext == ".klb":
         return source.KlbSource(uri)
-    elif luri.endswith(".ome.tif") or luri.endswith("ome.tiff") or lext not in (".tif", ".tiff", ".png", ".jpg", ".gif", ".mp4"):
+    elif luri.endswith(".ome.tif") or luri.endswith("ome.tiff") \
+            or lext not in (".tif", ".tiff", ".png", ".jpg", ".gif", ".mp4"):
         return source.BioformatsSource(uri)
     else:
         return source.ImageIOSource(uri)

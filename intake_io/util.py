@@ -1,33 +1,47 @@
-import os
-import numpy as np
-import dask.array as da
-import xarray as xr
 import copy
+import os
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
+
+import dask.array as da
 import intake
-from typing import Any, Dict, Optional, Tuple
+import numpy as np
+import xarray as xr
 
 
 def get_axes(image: Any) -> str:
     """
-    Get axis order of given image.
+    Get axis order of image.
 
-    Uses medatata where available (xarray data structures), otherwise performs
-    a best guess.
+    .. list-table:: Supported axes
 
-    Supported axes are 'itczyx': image index, time, channel, z, y, x
-    By convention, image arrays are intended to follow this axis order,
-    singleton dimensions may be dropped.
-    The only exception are 2D RGB images, which may be cyx or yxc.
+       * - Name
+         - Dimension
+       * - i
+         - image index
+       * - t
+         - time
+       * - c
+         - channel
+       * - z
+         - z
+       * - y
+         - y
+       * - x
+         - x
 
-    Parameters
-    ----------
-    image : xarray.Dataset, xarray.DataArray, numpy.ndarray, tuple, int
-        The image, its shape, or its nr of dimensions
+    Uses metadata where available (xarray data structures), otherwise assumes itczyx-ordering (intake_io default) using
+    the last ndim axes. The only exception are 2D RGB images, which may be cyx or yxc.
 
-    Returns
-    -------
-    str
-        Axis order, e.g. 'tzyx'
+    :param image:
+        One of the following types.
+            * :class:`xarray.Dataset`
+            * :class:`xarray.DataArray`
+            * :class:`numpy.ndarray`
+            * :class:`dask.Array`
+            * :class:`tuple` (shape)
+            * :class:`int` (number of non-singleton dimensions)
+    :return:
+        Axis order, e.g. "tzyx"
     """
     if isinstance(image, xr.DataArray):
         return "".join(image.dims)
@@ -40,7 +54,7 @@ def get_axes(image: Any) -> str:
 
     elif isinstance(image, np.ndarray) or isinstance(image, da.Array):
         # attempt to detect RGB
-        if image.ndim == 3 and any([np.issubdtype(image.dtype, i) for i in (np.uint8, np.float32)]):
+        if image.ndim == 3 and any(np.issubdtype(image.dtype, i) for i in (np.uint8, np.float32)):
             if image.shape[0] == 3:
                 return "cyx"
             elif image.shape[-1] == 3:
@@ -64,22 +78,16 @@ def get_axes(image: Any) -> str:
     raise NotImplementedError(f"intake_io.get_axes({type(image)})")
 
 
-def get_spacing(image: Any) -> Tuple[float, ...]:
+def get_spacing(image: Union[xr.Dataset, xr.DataArray]) -> Tuple[float, ...]:
     """
-    Get pixel spacing of given image.
+    Get pixel spacing of image.
 
-    Uses metadata where available (xarray data structures),
-    otherwise raises NotImplementedError.
+    Units are intended to be seconds and microns by convention.
 
-    Parameters
-    ----------
-    image : xarray.DataArray, xarray.Dataset
-
-    Returns
-    -------
-    Tuple[float, ...]
-        Pixel spacing in 'tzyx' order. Singleton dimensions may be dropped.
-        Units are intended to be seconds and microns by convention.    
+    :param image:
+        Image
+    :return:
+        Pixel spacing in "tzyx" order. Singleton dimensions may be dropped.
     """
     if isinstance(image, xr.DataArray):
         spacing = []
@@ -99,18 +107,14 @@ def get_spacing(image: Any) -> Tuple[float, ...]:
     raise NotImplementedError(f"intake_io.get_spacing({type(image)})")
 
 
-def to_numpy(image: Any) -> np.ndarray:
+def to_numpy(image: Union[xr.Dataset, xr.DataArray, np.ndarray]) -> np.ndarray:
     """
-    Convert input to numpy.ndarray.
+    Get pixel array of image.
 
-    Parameters
-    ----------
-    image :
-
-    Returns
-    -------
-    numpy.ndarray
-        The image as numpy array
+    :param image:
+        Image
+    :return:
+        Array
     """
     if isinstance(image, np.ndarray):
         return image
@@ -134,35 +138,27 @@ def to_xarray(
         name: Optional[str] = None,
         attrs: Optional[Dict[str, Any]] = None,
         partition: Optional[Any] = None
-        ) -> xr.DataArray:
+) -> xr.DataArray:
     """
-    Convert input to xarray.DataArray.
+    Combine inputs to xarray.DataArray.
 
     Preserve metadata where available and possible.
 
-    Parameters
-    ----------
-    image : Any
-        The image, dimension order should be itczyx, singleton dimensions
-        may be dropped
-    spacing : Optional[Tuple[float, ...]]
-        Time resolution and pixel spacing in tzyx order, seconds and microns.
-        Singleton dimensions may be omitted.
-    axes : Optional[str]
-        The image axes, e.g. "tyz"
-    coords : Optional[Dict[str, Any]]
-        Axis coordinates for axes not covered by the spacing parameter,
-        or to overwrite the spacing parameter
-    name : Optional[str]
+    :param image:
+        The image, dimension order should be itczyx, singleton dimensions may be dropped.
+    :param spacing:
+        Time resolution and pixel spacing in tzyx order, seconds and microns. Singleton dimensions may be dropped.
+    :param axes:
+        The image axes, e.g. "tyz".
+    :param coords:
+        Axis coordinates for axes not covered by the spacing parameter, or to overwrite the spacing parameter.
+    :param name:
         Name
-    attrs : Optional[Dict[str, Any]]
+    :param attrs:
         Additional metadata
-    partition : Optional[Any]
+    :param partition:
         Partition
-
-    Returns
-    -------
-    xarray.DataArray
+    :return:
         Image and any metadata
     """
     if isinstance(image, xr.DataArray):
@@ -176,7 +172,6 @@ def to_xarray(
     elif isinstance(image, np.ndarray) or isinstance(image, da.Array):
         if axes is None:
             axes = get_axes(image)
-        axes = axes[-image.ndim:]
 
         if coords is None:
             coords = {}
@@ -262,11 +257,22 @@ def to_xarray(
     return to_xarray(to_numpy(image), get_spacing(image), axes, coords, name, attrs)
 
 
-def get_catalog(sources, filepath=None):
+def get_catalog(sources: Iterable[intake.source.DataSource], filepath: Optional[str] = None) -> str:
+    """
+    Get catalog yml of data sources.
+
+    :param sources:
+        Data sources
+    :param filepath:
+         File path to save catalog to, or None if saving the result to file is not intended.
+    :return:
+        The yml text
+    """
     yml = [sources[0].yaml(), *[i.yaml().replace("sources:\n", "") for i in sources[1:]]]
     yml = "\n".join(yml)
     if filepath is not None:
-        assert not os.path.exists(filepath)
+        if os.path.exists(filepath):
+            raise FileExistsError(filepath)
         with open(filepath, "w") as f:
             f.write(yml)
     return yml
@@ -278,14 +284,11 @@ def clean_yaml(data: Dict[str, Any], rename_to: Optional[str] = None) -> Dict[st
 
     Used during creation of YAML catalog from list of sources.
 
-    Parameters
-    ----------
-    data : Dict[str, Any]
-    rename_to : Optional[str]
-
-    Returns
-    -------
-    Dict[str, Any]
+    :param data:
+        Dict[str, Any]
+    :param rename_to:
+        Optional[str]
+    :return:
         Cleaned dict
     """
     assert len(data["sources"].keys()) == 1
