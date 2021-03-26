@@ -1,4 +1,6 @@
 name: sphinx
+channels:
+  - conda-forge
 dependencies:
   - recommonmark
   - sphinx-autoapi
