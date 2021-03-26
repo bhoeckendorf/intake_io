@@ -1,6 +1,8 @@
 # [intake_io](https://github.com/bhoeckendorf/intake_io)
 
-Image-focused IO for [Python](https://www.python.org) using [intake](https://intake.readthedocs.io/en/latest/) as data loading backend and [xarray](http://xarray.pydata.org/en/stable/) as target.
+Image-focused IO for [Python](https://www.python.org) using [intake](https://intake.readthedocs.io/en/latest/) to wrap data loading backends and [xarray](http://xarray.pydata.org/en/stable/) as target.
+
+[![Documentation Status](https://readthedocs.org/projects/intake-io/badge/?version=latest)](https://intake-io.readthedocs.io/en/latest/?badge=latest)
 
 ## Why intake?
 
@@ -37,7 +39,7 @@ These drivers attempt to automatically detect the correct primary driver to use.
 | - | - |
 | Directory | concatenate image files in a directory along given axis |
 | File pattern | specify file pattern to load image files into multi-dimensional array |
-| [Flywheel](https://flywheel.io) | commercial HIPAA and GDPR compliant image database |
+| [Flywheel](https://flywheel.io) | commercial image database, HIPAA and GDPR compliant |
 | List | concatenate list of files or intake sources along given axis |
 
 ## Installation
@@ -46,7 +48,8 @@ These drivers attempt to automatically detect the correct primary driver to use.
 
 Execute the following in your conda environment of choice:
 ```sh
-$ conda install -y -c conda-forge dask imagecodecs imageio intake intake-xarray javabridge mrcfile natsort nibabel numcodecs pandas pydicom pynrrd tifffile xarray xmltodict zarr
+$ conda install -y -c conda-forge dask imagecodecs imageio intake intake-xarray python-javabridge mrcfile natsort 
+nibabel numcodecs pandas pydicom pynrrd tifffile xarray xmltodict zarr
 ```
 Then continue installing intake_io with pip as described in the following section.
 
@@ -54,5 +57,5 @@ Then continue installing intake_io with pip as described in the following sectio
 
 Execute the following in your virtualenv/conda environment of choice:
 ```sh
-$ pip install flywheel-sdk python-bioformats git+https://github.com/bhoeckendorf/pyklb.git@skbuild git+https://github.com/bhoeckendorf/intake_io.git
+$ pip install git+https://github.com/bhoeckendorf/pyklb.git@skbuild git+https://github.com/bhoeckendorf/intake_io.git
 ```
