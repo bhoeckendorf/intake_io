@@ -71,6 +71,7 @@ intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
     'xarray': ('https://xarray.pydata.org/en/stable/', None),
+    'dask': ('https://docs.dask.org/en/stable/', None),
     'pandas': ('https://pandas.pydata.org/pandas-docs/dev/', None),
-    'intake': ('https://intake.readthedocs.io/en/latest/', None)
+    'intake': ('https://intake.readthedocs.io/en/stable/', None)
 }
