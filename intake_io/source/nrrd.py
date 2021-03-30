@@ -128,7 +128,7 @@ def save_nrrd(image: Any, uri: str, compress: bool):
     spacing = get_spacing(image)
     if spacing is not None:
         #header["spacings"] = spacing[::-1]
-        header["space directions"] = np.eye(len(spacing), len(spacing), dtype=np.float)
+        header["space directions"] = np.eye(len(spacing), len(spacing), dtype=np.float64)
         for i, v in enumerate(spacing[::-1]):
             header["space directions"][i, i] = v
 
