@@ -8,9 +8,9 @@ import numpy as np
 import xarray as xr
 
 
-def get_axes(image: Any) -> str:
+def get_axes(x: Any) -> str:
     """
-    Get axis order of image.
+    Get axis order given image, shape or number of dimensions.
 
     .. list-table:: Supported axes
 
@@ -33,56 +33,68 @@ def get_axes(image: Any) -> str:
     the last ndim axes. The only exception are 2D RGB images, which may be cyx or yxc.
 
     :param image:
-        One of the following types.
+        One of the following types:
             * :class:`xarray.Dataset`
             * :class:`xarray.DataArray`
             * :class:`numpy.ndarray`
             * :class:`dask.Array`
             * :class:`tuple` (shape)
-            * :class:`int` (number of non-singleton dimensions)
+            * :class:`int` (number of dimensions)
     :return:
         Axis order, e.g. "tzyx"
     """
-    if isinstance(image, xr.DataArray):
-        return "".join(image.dims)
+    AXES = "itczyx"
 
-    elif isinstance(image, xr.Dataset):
-        ndim = len(image.dims)
-        for k in image.keys():
-            if image[k].ndim == ndim:
-                return get_axes(image[k])
+    if isinstance(x, xr.DataArray):
+        if len(x.shape) == 0:
+            raise ValueError(f"Image has no shape.")
+        out = ""
+        for i in map(str, x.dims):
+            if len(i) != 1 or i not in AXES:
+                raise ValueError(f"Unknown axis '{i}', supports '{AXES}'.")
+            out += i
+        return out
 
-    elif isinstance(image, np.ndarray) or isinstance(image, da.Array):
+    elif isinstance(x, xr.Dataset):
+        ndim = len(x.dims)
+        for img in x.values():
+            if img.ndim == ndim:
+                return get_axes(img)
+        raise ValueError(f"Dataset claims {ndim} dimensions but no data variable has that many dimensions.")
+
+    elif isinstance(x, np.ndarray) or isinstance(x, da.Array):
         # attempt to detect RGB
-        if image.ndim == 3 and any(np.issubdtype(image.dtype, i) for i in (np.uint8, np.float32)):
-            if image.shape[0] == 3:
+        if x.ndim == 3 and any(np.issubdtype(x.dtype, i) for i in (np.uint8, np.float32)):
+            if x.shape[0] == 3:
                 return "cyx"
-            elif image.shape[-1] == 3:
+            elif x.shape[-1] == 3:
                 return "yxc"
         # else defer
-        return get_axes(image.shape)
+        return get_axes(x.shape)
 
-    elif isinstance(image, tuple):
+    elif isinstance(x, tuple):
         # attempt to detect RGB
-        if len(image) == 3:
-            if image[0] == 3:
+        if len(x) == 3:
+            if x[0] == 3:
                 return "cyx"
-            elif image[-1] == 3:
+            elif x[-1] == 3:
                 return "yxc"
         # else defer
-        return get_axes(len(image))
+        return get_axes(len(x))
 
-    elif isinstance(image, int):
-        return "itczyx"[-image:]
+    elif isinstance(x, int):
+        if 1 <= x <= len(AXES):
+            return AXES[-x:]
+        raise ValueError(f"Found {x} axes, supports 1-{len(AXES)} axes.")
 
-    raise NotImplementedError(f"intake_io.get_axes({type(image)})")
+    raise NotImplementedError(f"intake_io.get_axes({type(x)})")
 
 
 def get_spacing(image: Union[xr.Dataset, xr.DataArray]) -> Tuple[float, ...]:
     """
     Get pixel spacing of image.
 
-    Units are intended to be seconds and microns by convention.
+    Returns 1 for any axis that lacks spacing metadata. Units are intended to be seconds and microns by convention.
 
     :param image:
         Image
@@ -100,9 +112,10 @@ def get_spacing(image: Union[xr.Dataset, xr.DataArray]) -> Tuple[float, ...]:
 
     elif isinstance(image, xr.Dataset):
         ndim = len(image.dims)
-        for k in image.keys():
-            if image[k].ndim == ndim:
-                return get_spacing(image[k])
+        for img in image.values():
+            if img.ndim == ndim:
+                return get_spacing(img)
+        raise ValueError(f"Dataset claims {ndim} dimensions but no data variable has that many dimensions.")
 
     raise NotImplementedError(f"intake_io.get_spacing({type(image)})")
 
@@ -125,7 +138,7 @@ def to_numpy(image: Union[xr.Dataset, xr.DataArray, np.ndarray]) -> np.ndarray:
     elif isinstance(image, xr.Dataset):
         if len(image) == 1:
             return image[list(image.keys())[0]].data
-        raise ValueError(f"intake_io.to_numpy({type(image)}) argument has >1 data variables")
+        raise ValueError(f"Dataset has {len(image)} data variables, please specify which one to use.")
 
     raise NotImplementedError(f"intake_io.to_numpy({type(image)})")
 
@@ -167,7 +180,7 @@ def to_xarray(
     elif isinstance(image, xr.Dataset):
         if len(image) == 1:
             return image[list(image.keys())[0]]
-        raise ValueError(f"intake_io.to_xarray({type(image)}, ...) argument has >1 data variables")
+        raise ValueError(f"Dataset has {len(image)} data variables, please specify which one to use.")
 
     elif isinstance(image, np.ndarray) or isinstance(image, da.Array):
         if axes is None:
