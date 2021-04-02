@@ -239,13 +239,7 @@ def to_xarray(
             pass
 
         if partition is not None:
-            if coords is not None:
-                coords = copy.deepcopy(coords)
-                try:
-                    coords.pop(axes[0])
-                except KeyError:
-                    pass
-            if axes[0] in "tzyx" and spacing is not None:
+            if spacing is not None and axes[0] in "tzyx":
                 spacing = spacing[1:]
             axes = axes[1:]
             img = to_xarray(image.read_partition(partition), spacing, axes, coords, name, attrs)
