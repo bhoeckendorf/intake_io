@@ -160,7 +160,7 @@ def to_xarray(
     :param image:
         The image, dimension order should be itczyx, singleton dimensions may be dropped.
     :param spacing:
-        Time resolution and pixel spacing in tzyx order, seconds and microns. Singleton dimensions may be dropped.
+        Time resolution and pixel spacing in tzyx order, seconds and microns. Non-existing dimensions must be omitted.
     :param axes:
         The image axes, e.g. "tyz".
     :param coords:
