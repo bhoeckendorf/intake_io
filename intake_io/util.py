@@ -185,32 +185,33 @@ def to_xarray(
     elif isinstance(image, np.ndarray) or isinstance(image, da.Array):
         if axes is None:
             axes = get_axes(image)
+        else:
+            if any(i not in "itczyx" for i in axes):
+                raise ValueError(f"Unknown axis in '{axes}', supports 'itczyx'.")
+            if any(axes.count(i) > 1 for i in axes):
+                raise ValueError(f"Duplicate axis in '{axes}'.")
+            if len(axes) != image.ndim:
+                raise ValueError(f"{image.ndim} image dimensions, but {len(axes)} axes: '{axes}'.")
 
         if coords is None:
             coords = {}
         else:
-            coords = copy.deepcopy(coords)
-        remove = []
-        for k in coords.keys():
-            if k not in axes:
-                remove.append(k)
-        for k in remove:
-            coords.pop(k)
+            # make copy, drop unused coordinates
+            coords = dict(filter(lambda x: x[0] in axes, copy.deepcopy(coords).items()))
 
         if spacing is not None:
-            spacing = spacing[-np.sum([a in axes for a in "tzyx"]):]
-            for a, s in zip("tzyx"[-len(spacing):], spacing):
+            # add spacing info to coords, if needed
+            for a, s in zip(list(filter(lambda x: x in "tzyx", axes))[-len(spacing):], spacing):
                 if a not in coords:
                     coords[a] = np.arange(image.shape[axes.index(a)], dtype=np.float64) * s
 
+        # in some circumstances, xarray rejects tuples as coords, so convert to list
+        for k, v in coords.items():
+            if isinstance(v, tuple):
+                coords[k] = list(v)
+
         if len(coords) == 0:
             coords = None
-
-        # xarray doesn't accept tuples as coords, convert to list if needed
-        if coords is not None:
-            for k, v in coords.items():
-                if isinstance(v, tuple):
-                    coords[k] = list(v)
 
         return xr.DataArray(image, dims=list(axes), coords=coords, name=name, attrs=attrs)
 
@@ -221,7 +222,7 @@ def to_xarray(
             try:
                 axes = image.metadata["axes"]
             except KeyError:
-                axes = "itczyx"[-len(image.shape):]
+                axes = get_axes(image.shape)
 
         if spacing is None:
             try:
