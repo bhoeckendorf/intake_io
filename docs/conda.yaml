@@ -1,8 +1,10 @@
 name: sphinx
 channels:
   - conda-forge
+  - defaults
 dependencies:
   - recommonmark
   - sphinx-autoapi
   - sphinx-autobuild
+  - sphinx-markdown-tables
   - sphinx_rtd_theme
