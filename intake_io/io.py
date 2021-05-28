@@ -2,6 +2,7 @@ import numpy as np
 import xarray as xr
 import intake
 import re
+import zarr
 from typing import Any, Optional
 from .util import *
 from .autodetect import *
@@ -44,7 +45,7 @@ def imsave(image: Any, uri: str, compress: bool = True):
 
 
 def save_zarr(image: Any, uri: str, compress: bool):
-    image = image.chunk({"i": 1})
+    #image = image.chunk({"i": 1})
     if compress:
         compressor = zarr.Blosc(cname="zstd", clevel=4)
         encoding = {k: {"compressor": compressor} for k in image.keys()}

@@ -254,7 +254,7 @@ def to_xarray(
         if "uri" not in img.attrs:
             try:
                 img.attrs["uri"] = image.uri
-            except KeyError:
+            except (AttributeError, KeyError):
                 pass
 
         return img
