@@ -37,12 +37,37 @@ class ImageIOSource(intake.source.base.DataSource):
         #    self._img = np.transpose(self._img, (2,0,1))
 
         fileheader = self._reader.get_meta_data()
+        shape = {k: 1 for k in "itczyx"}
+        spacing = {k: None for k in "tzyx"}
         if "is_ome" in fileheader and fileheader["is_ome"]:
             s = BioformatsSource._static_get_schema(fileheader["description"])
             s.npartitions = self._reader.get_length()
             return s
+        elif "is_imagej" in fileheader and fileheader["is_imagej"]:
+            metadata = dict()
+            for l in fileheader["is_imagej"].split():
+                k, v = l.split("=")
+                metadata[k] = v
+            fileheader["is_imagej"] = metadata
+            for field, axis in zip(["frames", "channels", "slices"], "tcz"):
+                try:
+                    shape[axis] = int(metadata[field])
+                except KeyError:
+                    continue
+            for field, axis in zip(["finterval", "spacing"], "tz"):
+                try:
+                    spacing[axis] = float(metadata[field])
+                except KeyError:
+                    continue
 
-        shape = tuple(im.shape) if self._reader.get_length() == 1 else (self._reader.get_length(), *im.shape)
+        for a, s in zip("yx", im.shape):
+            shape[a] = s
+        axes = "".join(k if shape[k] > 1 else "" for k in "itczyx")
+        shape = tuple(filter(lambda x: x > 1, (shape[k] for k in "itczyx")))
+        spacing = tuple(filter(lambda x: x is not None, (spacing[k] for k in "tzyx")))
+        if len(spacing) == 0:
+            spacing = None
+
         return intake.source.base.Schema(
             datashape=shape,
             shape=shape,
@@ -50,8 +75,8 @@ class ImageIOSource(intake.source.base.DataSource):
             npartitions=self._reader.get_length(),
             chunks=None,
             extra_metadata=dict(
-                axes=None,
-                spacing=None,
+                axes=axes,
+                spacing=spacing,
                 spacing_units=None,
                 coords=None,
                 fileheader=fileheader
