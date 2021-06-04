@@ -1,5 +1,5 @@
-import copy
 import os
+from copy import deepcopy
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import dask.array as da
@@ -90,34 +90,77 @@ def get_axes(x: Any) -> str:
     raise NotImplementedError(f"intake_io.get_axes({type(x)})")
 
 
-def get_spacing(image: Union[xr.Dataset, xr.DataArray]) -> Tuple[float, ...]:
+def get_spacing(
+        image: Union[xr.Dataset, xr.DataArray],
+        axes: Optional[str] = None
+) -> Union[Tuple[Optional[float], ...], Optional[float]]:
     """
-    Get pixel spacing of image.
+    Get pixel spacing of image or specific image axes.
 
-    Returns 1 for any axis that lacks spacing metadata. Units are intended to be seconds and microns by convention.
+    The return value for an axis without spacing metadata is either `None` or `1.0`, depending on what format the image
+    was loaded from. `None` is preferred.
 
     :param image:
         Image
+    :param axes:
+        Specific axes and ordering, or `None` for all axes in image dim order.
     :return:
-        Pixel spacing in "tzyx" order. Singleton dimensions may be dropped.
+        Pixel spacing as tuple, or directly if a single axis is requested.
     """
     if isinstance(image, xr.DataArray):
-        spacing = []
-        for a in "tzyx":
-            try:
-                spacing.append(image.coords[a].values[1] - image.coords[a].values[0])
-            except KeyError:
-                continue
-        return tuple(spacing)
+        if axes is None:
+            axes = "".join(filter(lambda x: x in "tzyx", get_axes(image)))
+            is_specific_axes = False
+        else:
+            is_specific_axes = True
+        spacing = tuple(
+            image.coords[ax].values[1] - image.coords[ax].values[0] if ax in image.coords else None for ax in axes)
+        if is_specific_axes and len(axes) == 1:
+            return spacing[0]
+        return spacing
 
     elif isinstance(image, xr.Dataset):
         ndim = len(image.dims)
         for img in image.values():
             if img.ndim == ndim:
-                return get_spacing(img)
+                return get_spacing(img, axes)
         raise ValueError(f"Dataset claims {ndim} dimensions but no data variable has that many dimensions.")
 
     raise NotImplementedError(f"intake_io.get_spacing({type(image)})")
+
+
+def get_spacing_units(
+        image: Union[xr.Dataset, xr.DataArray],
+        axes: Optional[str] = None
+) -> Union[Tuple[Optional[str], ...], Optional[str]]:
+    """
+    Get pixel spacing unit of image or specific image axes.
+
+    The return value for an axis without spacing metadata is `None`.
+
+    :param image:
+        Image
+    :param axes:
+        Specific axes and ordering, or `None` for all axes in image dim order.
+    :return:
+        Pixel spacing units as tuple, or directly if a single axis is requested.
+    """
+    if not any(isinstance(image, i) for i in (xr.Dataset, xr.DataArray)):
+        raise NotImplementedError(f"intake_io.get_spacing_units({type(image)})")
+    if axes is None:
+        axes = "".join(filter(lambda x: x in "tzyx", get_axes(image)))
+        is_specific_axes = False
+    else:
+        is_specific_axes = True
+    units = []
+    for ax in axes:
+        try:
+            units.append(image.attrs["metadata"]["spacing_units"][ax])
+        except KeyError:
+            units.append(None)
+    if is_specific_axes and len(axes) == 1:
+        return units[0]
+    return tuple(units)
 
 
 def to_numpy(image: Union[xr.Dataset, xr.DataArray, np.ndarray]) -> np.ndarray:
@@ -145,9 +188,10 @@ def to_numpy(image: Union[xr.Dataset, xr.DataArray, np.ndarray]) -> np.ndarray:
 
 def to_xarray(
         image: Any,
-        spacing: Optional[Tuple[float, ...]] = None,
+        spacing: Union[Dict[str, Optional[float]], Tuple[Optional[float], ...], None] = None,
         axes: Optional[str] = None,
         coords: Optional[Dict[str, Any]] = None,
+        spacing_units: Union[Dict[str, Optional[str]], Tuple[Optional[str], ...], None] = None,
         name: Optional[str] = None,
         attrs: Optional[Dict[str, Any]] = None,
         partition: Optional[Any] = None
@@ -158,13 +202,20 @@ def to_xarray(
     Preserve metadata where available and possible.
 
     :param image:
-        The image, dimension order should be itczyx, singleton dimensions may be dropped.
+        The image.
     :param spacing:
-        Time resolution and pixel spacing in tzyx order, seconds and microns. Non-existing dimensions must be omitted.
+        Time resolution and pixel spacing, as dict (axes are keys) or tuple (in image axes order, ignoring the
+        discontinuous axes "c" and "i"). Axes without pixel spacing metadata can be omitted (dict) or set to `None`
+        (dict and tuple).
     :param axes:
         The image axes, e.g. "tyz".
     :param coords:
-        Axis coordinates for axes not covered by the spacing parameter, or to overwrite the spacing parameter.
+        Axis coordinates for axes not covered by the spacing parameter (e.g. channel names), or to overwrite the
+        spacing parameter with e.g. non-uniform spacing values.
+    :param spacing_units:
+        Time resolution and pixel spacing units, as dict (axes are keys) or tuple (in image axes order, ignoring the
+        discontinuous axes "c" and "i"). Axes without pixel spacing metadata can be omitted (dict) or set to `None`
+        (dict and tuple).
     :param name:
         Name
     :param attrs:
@@ -197,13 +248,17 @@ def to_xarray(
             coords = {}
         else:
             # make copy, drop unused coordinates
-            coords = dict(filter(lambda x: x[0] in axes, copy.deepcopy(coords).items()))
+            coords = dict(filter(lambda x: x[0] in axes, deepcopy(coords).items()))
 
-        if spacing is not None:
-            # add spacing info to coords, if needed
-            for a, s in zip(list(filter(lambda x: x in "tzyx", axes))[-len(spacing):], spacing):
-                if a not in coords:
-                    coords[a] = np.arange(image.shape[axes.index(a)], dtype=np.float64) * s
+        # add spacing info to coords, if needed
+        if spacing is None:
+            spacing = {}
+        if spacing_units is None:
+            spacing_units = {}
+        spacing, spacing_units = _get_spacing_dicts(axes, spacing, spacing_units)
+        for a, s in spacing.items():
+            if a not in coords and s is not None:
+                coords[a] = np.arange(image.shape[axes.index(a)], dtype=np.float64) * s
 
         # in some circumstances, xarray rejects tuples as coords, so convert to list
         for k, v in coords.items():
@@ -212,6 +267,14 @@ def to_xarray(
 
         if len(coords) == 0:
             coords = None
+
+        if attrs is None:
+            attrs = {"metadata": {"spacing_units": spacing_units}}
+        else:
+            if "metadata" not in attrs:
+                attrs["metadata"] = {"spacing_units": spacing_units}
+            else:
+                attrs["metadata"].update({"spacing_units": spacing_units})
 
         return xr.DataArray(image, dims=list(axes), coords=coords, name=name, attrs=attrs)
 
@@ -230,6 +293,12 @@ def to_xarray(
             except KeyError:
                 pass
 
+        if spacing_units is None:
+            try:
+                spacing_units = image.metadata["spacing_units"]
+            except KeyError:
+                pass
+
         try:
             if coords is None:
                 coords = image.metadata["coords"]
@@ -242,9 +311,9 @@ def to_xarray(
             if spacing is not None and axes[0] in "tzyx":
                 spacing = spacing[1:]
             axes = axes[1:]
-            img = to_xarray(image.read_partition(partition), spacing, axes, coords, name, attrs)
+            img = to_xarray(image.read_partition(partition), spacing, axes, coords, spacing_units, name, attrs)
         else:
-            img = to_xarray(image.read(), spacing, axes, coords, name, attrs)
+            img = to_xarray(image.read(), spacing, axes, coords, spacing_units, name, attrs)
 
         if "metadata" not in img.attrs:
             img.attrs["metadata"] = image.metadata
@@ -284,6 +353,76 @@ def get_catalog(sources: Iterable[intake.source.DataSource], filepath: Optional[
         with open(filepath, "w") as f:
             f.write(yml)
     return yml
+
+
+def _get_spacing_dicts(
+        axes: str,
+        spacing: Union[Dict[str, Optional[float]], Tuple[Optional[float], ...]],
+        units: Union[Dict[str, Optional[str]], Tuple[Optional[str], ...]]
+) -> Tuple[Dict[str, float], Dict[str, str]]:
+    spatial_axes = "".join(filter(lambda x: x in "tzyx", axes))
+
+    # Normalize spacing
+    if not isinstance(spacing, dict):
+        spacing = {a: s for a, s in zip(spatial_axes[-len(spacing):], spacing)}
+    else:
+        spacing = deepcopy(spacing)
+    for ax in list(spacing.keys()):
+        if spacing[ax] is None or np.isnan(spacing[ax]):
+            spacing.pop(ax)
+
+    # Normalize units
+    if not isinstance(units, dict):
+        units = {a: s for a, s in zip(spatial_axes[-len(units):], units)}
+    else:
+        units = deepcopy(units)
+    for k in list(units.keys()):
+        if k not in spacing or units[k] in (None, "", " ", "pixel", "pix", "px"):
+            units.pop(k)
+
+    # Fill missing spatial units
+    unit = None
+    for ax in filter(lambda x: x in "zyx", units.keys()):
+        if unit is None:
+            unit = units[ax]
+        elif units[ax] != unit:
+            unit = None
+            break
+    if unit is not None:
+        for ax in filter(lambda x: x in axes, "zyx"):
+            if ax in spacing and ax not in units:
+                units[ax] = unit
+
+    return spacing, units
+
+
+def _reorder_axes(array: np.ndarray, axes_source: str, axes_target: Optional[str] = None) -> np.ndarray:
+    if axes_target is None:
+        axes_target = "itczyx"
+    if len(axes_target) > len(axes_source):
+        axes_target = "".join(filter(lambda x: x in axes_source, axes_target))
+
+    for i in (axes_source, axes_target):
+        if not len(set(i)) == len(i):
+            raise ValueError(f"Duplicate axis in {i}.")
+
+    if any(i not in axes_source for i in axes_target):
+        raise ValueError(f"Requested axis order '{axes_target}' can't be satisfied by data '{axes_source}'.")
+    if any(i not in axes_target for i in axes_source):
+        raise ValueError(f"Requested axis order '{axes_target}' is insufficient for data '{axes_source}'.")
+
+    try:
+        reorder = [axes_source.index(i) for i in axes_target[-len(axes_source):]]
+    except ValueError:
+        raise ValueError(f"Can't reorder axes from '{axes_source}' to '{axes_target[-len(axes_source):]}'."
+                         " This is usually caused by loading a data partition and asking for an axis order that would"
+                         " require to intercalate axes from outside the loaded partition."
+                         f" In this case, the loaded data is '{axes_source}' and the requested order"
+                         f" is '{axes_target}'.")
+
+    if len(reorder) < 2 or all(reorder[i] + 1 == reorder[i + 1] for i in range(len(reorder) - 1)):
+        return array
+    return np.ascontiguousarray(array.transpose(*reorder))
 
 
 def clean_yaml(data: Dict[str, Any], rename_to: Optional[str] = None) -> Dict[str, Any]:
