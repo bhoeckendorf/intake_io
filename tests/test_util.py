@@ -79,28 +79,29 @@ def test_get_axes():
 
 
 def test_get_spacing():
-    assert get_spacing(xr.DataArray(np.zeros((8,)), dims=tuple("x"))) == (1,)
-    assert get_spacing(xr.DataArray(np.zeros((8, 8, 8)), dims=tuple("zyx"))) == (1, 1, 1)
-    assert get_spacing(xr.DataArray(np.zeros((8, 8)), dims=tuple("cx"))) == (1,)
-    assert get_spacing(xr.DataArray(np.zeros((8, 8, 8, 8)), dims=tuple("czyx"))) == (1, 1, 1)
+    assert get_spacing(xr.DataArray(np.zeros((8,)), dims=tuple("x"))) == (None,)
+    assert get_spacing(xr.DataArray(np.zeros((8,)), dims=tuple("x")), "x") == None
+    assert get_spacing(xr.DataArray(np.zeros((8, 8, 8)), dims=tuple("zyx"))) == (None, None, None)
+    assert get_spacing(xr.DataArray(np.zeros((8, 8)), dims=tuple("cx"))) == (None,)
+    assert get_spacing(xr.DataArray(np.zeros((8, 8, 8, 8)), dims=tuple("czyx"))) == (None, None, None)
     assert get_spacing(xr.DataArray(np.zeros((8, 8, 8)), dims=tuple("zyx"), coords={
         "z": np.arange(8),
         "x": np.arange(8) * 0.125
-    })) == (1, 1, 0.125)
+    })) == (1, None, 0.125)
 
     assert get_spacing(xr.Dataset({
         "image": xr.DataArray(np.zeros((8, 8, 8)), dims=tuple("zyx"), coords={
             "z": np.arange(8),
             "x": np.arange(8) * 0.125
         })
-    })) == (1, 1, 0.125)
+    })) == (1, None, 0.125)
     assert get_spacing(xr.Dataset({
         "0": xr.DataArray(np.zeros((8, 8)), dims=tuple("yx")),
         "image": xr.DataArray(np.zeros((8, 8, 8)), dims=tuple("zyx"), coords={
             "z": np.arange(8),
             "x": np.arange(8) * 0.125
         })
-    })) == (1, 1, 0.125)
+    })) == (1, None, 0.125)
 
 
 def test_to_xarray():
@@ -122,21 +123,21 @@ def test_to_xarray():
     assert arr.coords["x"][1] == 0.3
 
     arr = to_xarray(np.zeros((8, 2, 16, 32), np.uint8), (0.2, 0.3), axes="tcyx", coords={"c": (1, 2)})
-    assert get_spacing(arr) == (1.0, 0.2, 0.3)
+    assert get_spacing(arr) == (None, 0.2, 0.3)
     assert "t" not in arr.coords
     assert arr.coords["c"][1] == 2
     assert arr.coords["y"][1] == 0.2
     assert arr.coords["x"][1] == 0.3
 
     arr = to_xarray(np.zeros((8, 2, 16, 32), np.uint8), (0.2, 0.3), axes="tcyx")
-    assert get_spacing(arr) == (1.0, 0.2, 0.3)
+    assert get_spacing(arr) == (None, 0.2, 0.3)
     assert "t" not in arr.coords
     assert "c" not in arr.coords
     assert arr.coords["y"][1] == 0.2
     assert arr.coords["x"][1] == 0.3
 
     arr = to_xarray(np.zeros((2, 8, 2, 8, 16, 32), np.uint8), (0.1, 0.2, 0.3), axes="itczyx", coords={"c": (1, 2)})
-    assert get_spacing(arr) == (1.0, 0.1, 0.2, 0.3)
+    assert get_spacing(arr) == (None, 0.1, 0.2, 0.3)
     for i in "it":
         assert i not in arr.coords
     assert arr.coords["c"][1] == 2
