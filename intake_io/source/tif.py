@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 import numpy as np
@@ -5,7 +6,7 @@ import tifffile
 import xarray as xr
 
 from .base import ImageSource, Schema
-from .bioformats import BioformatsSource
+from .bioformats import _parse_ome_metadata
 from ..util import _reorder_axes, get_axes, get_spacing, get_spacing_units
 
 
@@ -49,10 +50,16 @@ class TifSource(ImageSource):
                     fileheader[flag] = metadata
 
         if "ome" in fileheader:
-            schema = BioformatsSource._static_get_schema(fileheader["ome"])
-            schema.npartitions = sum(len(i) for i in self._file.series)
-            # TODO: merge fileheader
-            return schema
+            ome = _parse_ome_metadata(fileheader["ome"])
+            shape = self._set_shape_metadata(ome["axes"], ome["shape"], ome["spacing"], ome["spacing_units"],
+                                             ome["coords"])
+            self._set_fileheader(ome["fileheader"])
+            return Schema(
+                dtype=ome["dtype"],
+                shape=shape,
+                npartitions=sum(len(i) for i in self._file.series),
+                chunks=None
+            )
 
         series = self._file.series[0]
         axes = series.axes.lower()
