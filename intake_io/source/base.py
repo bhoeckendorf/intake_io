@@ -33,6 +33,33 @@ class ImageSource(DataSource):
         else:
             if len(axes) != len(shape):
                 raise ValueError(f"Axes and shape mismatch: {axes}, {shape}.")
+
+        if self.metadata.get("axes"):
+            _axes = axes
+            axes = self.metadata["axes"]
+
+            if len(set(axes)) != len(axes):
+                raise ValueError(f"Duplicate axis in {axes}.")
+
+            if len(axes) != len(_axes):
+                raise ValueError(f"Nr of specified and original axes mismatch: {axes}, {_axes}.")
+
+            if isinstance(shape, dict):
+                _shape = deepcopy(shape)
+                shape = {n: _shape[o] for o, n in zip(_axes, axes)}
+                if any(ax not in shape for ax in axes):
+                    raise ValueError(f"Axes and shape mismatch: {axes}, {shape}.")
+
+            _spacing = deepcopy(spacing)
+            spacing = {n: _spacing[o] for o, n in zip(_axes, axes) if o in _spacing}
+
+            _spacing_units = deepcopy(spacing_units)
+            spacing_units = {n: _spacing_units[o] for o, n in zip(_axes, axes) if o in _spacing_units}
+
+            _coords = deepcopy(coords)
+            coords = {n: _coords[o] for o, n in zip(_axes, axes) if o in _coords}
+
+        if not isinstance(shape, dict):
             shape = {a: s for a, s in zip(axes, shape)}
 
         self.metadata["original_axes"] = axes
