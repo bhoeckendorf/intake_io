@@ -368,7 +368,7 @@ def _get_spacing_dicts(
     else:
         spacing = deepcopy(spacing)
     for ax in list(spacing.keys()):
-        if spacing[ax] is None or np.isnan(spacing[ax]):
+        if ax not in unit_axes or spacing[ax] is None or np.isnan(spacing[ax]):
             spacing.pop(ax)
 
     # Normalize units
@@ -376,9 +376,13 @@ def _get_spacing_dicts(
         units = {a: s for a, s in zip(unit_axes[-len(units):], units)}
     else:
         units = deepcopy(units)
-    for k in list(units.keys()):
-        if k not in spacing or units[k] in (None, "", " ", "pixel", "pix", "px"):
-            units.pop(k)
+    for ax in list(units.keys()):
+        if ax not in spacing:
+            units.pop(ax)
+        elif units[ax] in (None, "", " ", "pixel", "pix", "px"):
+            units.pop(ax)
+            if spacing[ax] == 1.0:
+                spacing.pop(ax)
 
     # Fill missing spatial units
     unit = None
