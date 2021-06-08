@@ -383,6 +383,8 @@ def _get_spacing_dicts(
             units.pop(ax)
             if spacing[ax] in (0.0, 1.0):
                 spacing.pop(ax)
+        elif "\\" in units[ax]:
+            units[ax] = units[ax].encode("latin-1", "backslashreplace").decode("unicode-escape")
 
     # Fill missing spatial units
     unit = None
