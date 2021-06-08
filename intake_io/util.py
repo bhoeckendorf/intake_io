@@ -379,9 +379,9 @@ def _get_spacing_dicts(
     for ax in list(units.keys()):
         if ax not in spacing:
             units.pop(ax)
-        elif units[ax] in (None, "", " ", "pixel", "pix", "px"):
+        elif units[ax] in (None, "", " ", "pixel", "pix", "px", "sec"):
             units.pop(ax)
-            if spacing[ax] == 1.0:
+            if spacing[ax] in (0.0, 1.0):
                 spacing.pop(ax)
 
     # Fill missing spatial units

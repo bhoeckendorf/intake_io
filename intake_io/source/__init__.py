@@ -9,3 +9,4 @@ from .klb import KlbSource
 from .list import ListSource
 from .nifti import NiftiSource
 from .nrrd import NrrdSource
+from .tif import TifSource
