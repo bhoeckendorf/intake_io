@@ -109,7 +109,7 @@ def get_spacing(
     """
     if isinstance(image, xr.DataArray):
         if axes is None:
-            axes = "".join(filter(lambda x: x in "tzyx", get_axes(image)))
+            axes = "".join(i for i in get_axes(image) if i in "tzyx")
             is_specific_axes = False
         else:
             is_specific_axes = True
@@ -148,7 +148,7 @@ def get_spacing_units(
     if not any(isinstance(image, i) for i in (xr.Dataset, xr.DataArray)):
         raise NotImplementedError(f"intake_io.get_spacing_units({type(image)})")
     if axes is None:
-        axes = "".join(filter(lambda x: x in "tzyx", get_axes(image)))
+        axes = "".join(i for i in get_axes(image) if i in "tzyx")
         is_specific_axes = False
     else:
         is_specific_axes = True
@@ -248,7 +248,7 @@ def to_xarray(
             coords = {}
         else:
             # make copy, drop unused coordinates
-            coords = dict(filter(lambda x: x[0] in axes, deepcopy(coords).items()))
+            coords = dict(i for i in deepcopy(coords).items() if i[0] in axes)
 
         # add spacing info to coords, if needed
         if spacing is None:
@@ -360,11 +360,11 @@ def _get_spacing_dicts(
         spacing: Union[Dict[str, Optional[float]], Tuple[Optional[float], ...]],
         units: Union[Dict[str, Optional[str]], Tuple[Optional[str], ...]]
 ) -> Tuple[Dict[str, float], Dict[str, str]]:
-    spatial_axes = "".join(filter(lambda x: x in "tzyx", axes))
+    unit_axes = "".join(i for i in axes if i in "tzyx")
 
     # Normalize spacing
     if not isinstance(spacing, dict):
-        spacing = {a: s for a, s in zip(spatial_axes[-len(spacing):], spacing)}
+        spacing = {a: s for a, s in zip(unit_axes[-len(spacing):], spacing)}
     else:
         spacing = deepcopy(spacing)
     for ax in list(spacing.keys()):
@@ -373,7 +373,7 @@ def _get_spacing_dicts(
 
     # Normalize units
     if not isinstance(units, dict):
-        units = {a: s for a, s in zip(spatial_axes[-len(units):], units)}
+        units = {a: s for a, s in zip(unit_axes[-len(units):], units)}
     else:
         units = deepcopy(units)
     for k in list(units.keys()):
@@ -382,14 +382,14 @@ def _get_spacing_dicts(
 
     # Fill missing spatial units
     unit = None
-    for ax in filter(lambda x: x in "zyx", units.keys()):
+    for ax in [i for i in units.keys() if i in "zyx"]:
         if unit is None:
             unit = units[ax]
         elif units[ax] != unit:
             unit = None
             break
     if unit is not None:
-        for ax in filter(lambda x: x in axes, "zyx"):
+        for ax in [i for i in "zyx" if i in axes]:
             if ax in spacing and ax not in units:
                 units[ax] = unit
 
@@ -400,7 +400,7 @@ def _reorder_axes(array: np.ndarray, axes_source: str, axes_target: Optional[str
     if axes_target is None:
         axes_target = "itczyx"
     if len(axes_target) > len(axes_source):
-        axes_target = "".join(filter(lambda x: x in axes_source, axes_target))
+        axes_target = "".join(i for i in axes_target if i in axes_source)
 
     for i in (axes_source, axes_target):
         if not len(set(i)) == len(i):

@@ -38,7 +38,7 @@ class NrrdSource(ImageSource):
             axes = "".join(header["labels"])[::-1]
         except KeyError:
             axes = get_axes(shape)
-        unit_axes = "".join(filter(lambda x: x in "tzyx", axes))
+        unit_axes = "".join(i for i in axes if i in "tzyx")
 
         try:
             spacing = tuple(header["spacings"])[::-1]
@@ -107,13 +107,13 @@ def save_nrrd(image: Any, uri: str, compress: bool):
 
     header["spacings"] = []
     header["units"] = []
-    for ax in filter(lambda x: x in "tzyx", axes):
+    for ax in [i for i in axes if i in "tzyx"]:
         header["spacings"].append(get_spacing(image, ax) or np.NaN)
         header["units"].append(get_spacing_units(image, ax) or "")
     header["space units"] = header["units"]
 
     space = np.eye(sum(ax in axes for ax in "zyx"))
-    for i, s in enumerate(get_spacing(image, ax) or 1.0 for ax in filter(lambda x: x in "zyx", axes)):
+    for i, s in enumerate(get_spacing(image, ax) or 1.0 for ax in [i for i in axes if i in "zyx"]):
         space[i, i] = s
     header["space directions"] = space
 

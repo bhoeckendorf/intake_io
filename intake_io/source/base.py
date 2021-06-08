@@ -37,7 +37,7 @@ class ImageSource(DataSource):
 
         self.metadata["original_axes"] = axes
         self.metadata["axes"] = axes if self._output_axis_order is None else "".join(
-            filter(lambda x: x in axes, self._output_axis_order))
+            i for i in self._output_axis_order if i in axes)
 
         spacing.update(self.metadata.get("spacing") or {})
         spacing_units.update(self.metadata.get("spacing_units") or {})
