@@ -30,9 +30,13 @@ class ImageSource(DataSource):
         if isinstance(shape, dict):
             if any(ax not in shape for ax in axes):
                 raise ValueError(f"Axes and shape mismatch: {axes}, {shape}.")
+            self.metadata["original_shape"] = tuple(shape[ax] for ax in axes)
         else:
             if len(axes) != len(shape):
                 raise ValueError(f"Axes and shape mismatch: {axes}, {shape}.")
+            self.metadata["original_shape"] = shape
+            shape = dict(zip(axes, shape))
+        self.metadata["original_axes"] = axes
 
         if self.metadata.get("axes"):
             _axes = axes
@@ -44,11 +48,10 @@ class ImageSource(DataSource):
             if len(axes) != len(_axes):
                 raise ValueError(f"Nr of specified and original axes mismatch: {axes}, {_axes}.")
 
-            if isinstance(shape, dict):
-                _shape = deepcopy(shape)
-                shape = {n: _shape[o] for o, n in zip(_axes, axes)}
-                if any(ax not in shape for ax in axes):
-                    raise ValueError(f"Axes and shape mismatch: {axes}, {shape}.")
+            _shape = deepcopy(shape)
+            shape = {n: _shape[o] for o, n in zip(_axes, axes)}
+            if any(ax not in shape for ax in axes):
+                raise ValueError(f"Axes and shape mismatch: {axes}, {shape}.")
 
             _spacing = deepcopy(spacing)
             spacing = {n: _spacing[o] for o, n in zip(_axes, axes) if o in _spacing}
@@ -59,10 +62,6 @@ class ImageSource(DataSource):
             _coords = deepcopy(coords)
             coords = {n: _coords[o] for o, n in zip(_axes, axes) if o in _coords}
 
-        if not isinstance(shape, dict):
-            shape = {a: s for a, s in zip(axes, shape)}
-
-        self.metadata["original_axes"] = axes
         self.metadata["axes"] = axes if self._output_axis_order is None else "".join(
             i for i in self._output_axis_order if i in axes)
 
