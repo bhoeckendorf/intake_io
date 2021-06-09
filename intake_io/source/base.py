@@ -59,8 +59,9 @@ class ImageSource(DataSource):
             _spacing_units = deepcopy(spacing_units)
             spacing_units = {n: _spacing_units[o] for o, n in zip(_axes, axes) if o in _spacing_units}
 
-            _coords = deepcopy(coords)
-            coords = {n: _coords[o] for o, n in zip(_axes, axes) if o in _coords}
+            if coords is not None:
+                _coords = deepcopy(coords)
+                coords = {n: _coords[o] for o, n in zip(_axes, axes) if o in _coords}
 
         self.metadata["axes"] = axes if self._output_axis_order is None else "".join(
             i for i in self._output_axis_order if i in axes)
