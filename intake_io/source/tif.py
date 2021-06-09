@@ -95,7 +95,9 @@ class TifSource(ImageSource):
                 4: 1e3,    # mm
             }
             for ax in spacing.keys():
-                spacing[ax] *= factors[v]
+                if ax in "zyx":
+                    spacing[ax] *= factors[v]
+                    spacing_units[ax] = "\u03BCm"
         except KeyError:
             pass
 
