@@ -42,7 +42,13 @@ class TifSource(ImageSource):
                 f"Loading TIF files containing multiple series is currently unsupported. {self.uri} contains "
                 f"{len(self._file.series)} series.")
 
-        fileheader = {k: getattr(self._file, f"{k}_metadata") for k in self._file.flags}
+        fileheader = {}
+        for k in self._file.flags:
+            try:
+                fileheader[k] = getattr(self._file, f"{k}_metadata")
+            except AttributeError:
+                continue
+
         for flag in ("imagej", "ome"):
             if flag not in fileheader:
                 metadata = getattr(self._file, f"{flag}_metadata", None)
@@ -94,10 +100,12 @@ class TifSource(ImageSource):
                 3: 1e4,    # cm
                 4: 1e3,    # mm
             }
-            for ax in spacing.keys():
-                if ax in "yx":
+            for ax in "xy":
+                try:
                     spacing[ax] *= factors[v]
                     spacing_units[ax] = "\u03BCm"
+                except KeyError:
+                    continue
         except KeyError:
             pass
 
