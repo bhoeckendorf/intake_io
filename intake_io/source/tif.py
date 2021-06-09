@@ -87,6 +87,18 @@ class TifSource(ImageSource):
                 v = v[1] / v[0]
             spacing[ax] = v
 
+        try:
+            v = int(series[0].tags["ResolutionUnit"].value)
+            factors = {
+                2: 254e2,  # inch
+                3: 1e4,    # cm
+                4: 1e3,    # mm
+            }
+            for ax in spacing.keys():
+                spacing[ax] *= factors[v]
+        except KeyError:
+            pass
+
         if "imagej" in fileheader:
             metadata = fileheader["imagej"]
 
