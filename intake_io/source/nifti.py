@@ -1,15 +1,18 @@
 import re
-import numpy as np
+from gzip import GzipFile
+from io import BytesIO
+from typing import Any, Optional, Union
+
 import nibabel
-import intake
-from typing import Any, Optional
-from ..util import *
+import numpy as np
+import xarray as xr
+from nibabel import Nifti1Image
 
-# ToDos:
-# Reversing the axes order to zyx invalidates the affine matrix in the header.
-# There may be additional meta data in the header object attributes/functions.
+from .base import ImageSource, Schema
+from ..util import get_axes, get_spacing, to_numpy
 
-class NiftiSource(intake.source.base.DataSource):
+
+class NiftiSource(ImageSource):
     """Intake source for NIFTI files.
 
     Attributes:
@@ -21,36 +24,34 @@ class NiftiSource(intake.source.base.DataSource):
     version = "0.0.1"
     partition_access = False
 
-    def __init__(self, uri: str, metadata: Optional[dict] = None):
+    def __init__(self, uri: Optional[str], stream: Optional[Union[BytesIO, GzipFile]] = None, **kwargs):
         """
         Arguments:
             uri (str): URI (file system path)
             metadata (dict, optional): Extra metadata, handed over to intake
         """
-        super().__init__(metadata=metadata)
+        super().__init__(**kwargs)
         self.uri = uri
-        self._filehandle = None
+        self._filehandle = None if stream is None else Nifti1Image.from_bytes(stream.read())
 
-    def _get_schema(self) -> intake.source.base.Schema:
+    def _get_schema(self) -> Schema:
         if self._filehandle is None:
             self._filehandle = nibabel.load(self.uri)
-        h = self._filehandle.header
+        header = self._filehandle.header
 
-        axes = None
-        shape = h.get_data_shape()
-        spacing = h["pixdim"][1:len(shape)+1]
+        dtype = np.dtype(header.get_data_dtype())
+        shape = tuple(header.get_data_shape())
+        axes = get_axes(shape)[::-1]
+        spacing = tuple(header["pixdim"][1:len(shape) + 1])
         spacing_units = {}
-        if axes is not None:
-            for d in axes:
-                if d in "zyx":
-                    spacing_units[d] = h.get_xyzt_units()[0]
-                elif d == "t":
-                    spacing_units[d] = h.get_xyzt_units()[1]
-        if len(spacing_units) == 0:
-            spacing_units = None
+        for ax in axes:
+            if ax in "zyx":
+                spacing_units[ax] = header.get_xyzt_units()[0]
+            elif ax == "t":
+                spacing_units[ax] = header.get_xyzt_units()[1]
 
         # clean file header
-        header = dict(h)
+        header = dict(header)
         for k, v in header.items():
             if isinstance(v, np.ndarray):
                 if v.dtype.kind == "S":
@@ -68,28 +69,23 @@ class NiftiSource(intake.source.base.DataSource):
                     elif v.dtype.kind == "f":
                         header[k] = float(v)
 
-        return intake.source.base.Schema(
-            datashape=shape[::-1],
-            shape=shape[::-1],
-            dtype=np.dtype(h.get_data_dtype()),
+        shape = self._set_shape_metadata(axes, shape, spacing, spacing_units)
+        self._set_fileheader(header)
+        return Schema(
+            dtype=dtype,
+            shape=shape,
             npartitions=1,
-            chunks=None,
-            extra_metadata=dict(
-                axes=axes,
-                spacing=tuple(spacing[::-1]),
-                spacing_units=None,
-                coords=None,
-                fileheader=header
-            )
+            chunks=None
         )
 
     def _get_partition(self, i: int) -> np.ndarray:
-        out = self._filehandle.dataobj.get_unscaled().T
+        out = self._reorder_axes(self._filehandle.dataobj.get_unscaled())
         self._filehandle.uncache()
         return out
 
     def _close(self):
-        pass
+        if self._filehandle is not None:
+            self._filehandle.uncache()
 
 
 def save_nifti(image: Any, uri: str, compress: bool):
@@ -105,9 +101,9 @@ def save_nifti(image: Any, uri: str, compress: bool):
     h = nibabel.Nifti2Header()
     h.set_data_shape(image.shape[::-1])
     h.set_data_dtype(image.dtype)
-    h.get("pixdim")[1:1+image.ndim] = get_spacing(image)[::-1]
+    h.get("pixdim")[1:1 + image.ndim] = get_spacing(image)[::-1]
     ni = nibabel.Nifti2Image(
         to_numpy(image).T,
-        affine=np.eye(image.ndim+1, image.ndim+1),
+        affine=np.eye(image.ndim + 1, image.ndim + 1),
         header=h)
     nibabel.save(ni, uri)
