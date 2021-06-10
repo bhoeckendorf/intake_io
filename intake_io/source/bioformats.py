@@ -109,26 +109,13 @@ class BioformatsSource(ImageSource):
     def read(self) -> np.ndarray:
         self._load_metadata()
         out = np.zeros(self.metadata["original_shape"], self.dtype)
-        if out.ndim == 2:
-            pass
-        else:
-            with bioformats.ImageReader(self.uri) as reader:
-                # it = np.nditer(out,
-                #    flags=("c_index", "multi_index"),
-                #    op_flags=("writeonly",),
-                #    op_axes=(list(range(out.ndim-2)),))
-                # while not it.finished:
-                #    ix = dict(zip(self.metadata["axes"][:len(it.multi_index)], it.multi_index))
-                #    out[it.multi_index] = reader.read(ix.get("c"), ix.get("z") or 0, ix.get("t") or 0, rescale=False)
-                #    it.iternext()
-
-                with np.nditer(out, flags=("multi_index",), op_flags=("readonly",),
-                               op_axes=(list(range(out.ndim - 2)),)) as ndit:
-                    for it in ndit:
-                        ix = dict(zip(self.metadata["original_axes"][:len(ndit.multi_index)], ndit.multi_index))
-                        # it[...] = reader.read(ix.get("c"), ix.get("z") or 0, ix.get("t") or 0, rescale=False)
-                        out[ndit.multi_index] = reader.read(ix.get("c"), ix.get("z") or 0, ix.get("t") or 0,
-                                                            rescale=False)
+        with bioformats.ImageReader(self.uri) as reader:
+            with np.nditer(out, flags=("multi_index",), op_flags=("readonly",),
+                            op_axes=(list(range(out.ndim - 2)),)) as ndit:
+                for it in ndit:
+                    ix = dict(zip(self.metadata["original_axes"][:len(ndit.multi_index)], ndit.multi_index))
+                    # it[...] = reader.read(ix.get("c"), ix.get("z") or 0, ix.get("t") or 0, rescale=False)
+                    out[ndit.multi_index] = reader.read(ix.get("c"), ix.get("z") or 0, ix.get("t") or 0, rescale=False)
         return self._reorder_axes(out)
 
     def _close(self):
