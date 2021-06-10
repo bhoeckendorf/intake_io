@@ -61,10 +61,11 @@ class FilePattern:
     def coords_inner(self) -> dict:
         try:
             out = self.get_file_metadata()["metadata"]["coords"]
-            if out is None:
-                return {}
         except KeyError:
+            out = None
+        if out is None:
             return {}
+        return out
 
     @property
     def coords_outer(self) -> dict:
