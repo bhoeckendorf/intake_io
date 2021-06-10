@@ -25,7 +25,9 @@ def autodetect(uri: str, **kwargs) -> intake.source.DataSource:
     """
     luri = uri.lower()
     lext = os.path.splitext(luri)[-1]
-    if lext == ".nrrd":
+    if luri.startswith("flywheel:"):
+        return source.FlywheelSource(uri, **kwargs)
+    elif lext == ".nrrd":
         return source.NrrdSource(uri, **kwargs)
     elif lext in (".tif", ".tiff"):
         return source.TifSource(uri, **kwargs)
