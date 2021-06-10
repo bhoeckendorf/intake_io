@@ -20,7 +20,7 @@ class ImageSource(DataSource):
             self,
             axes: str,
             shape: Union[Dict[str, int], Tuple[int, ...]],
-            spacing: Dict[str, float],
+            spacing: Union[Dict[str, float], Tuple[float, ...]],
             spacing_units: Dict[str, str],
             coords: Optional[Dict[str, Any]] = None
     ) -> Tuple[int, ...]:
@@ -38,6 +38,10 @@ class ImageSource(DataSource):
             shape = dict(zip(axes, shape))
         self.metadata["original_axes"] = axes
 
+        if not isinstance(spacing, dict):
+            spacing = dict(zip([i for i in axes if i in "tzyx"][-len(spacing):], spacing))
+
+        # reassign axes if needed, don't reorder
         if self.metadata.get("axes"):
             _axes = axes
             axes = self.metadata["axes"]
@@ -50,8 +54,6 @@ class ImageSource(DataSource):
 
             _shape = deepcopy(shape)
             shape = {n: _shape[o] for o, n in zip(_axes, axes)}
-            if any(ax not in shape for ax in axes):
-                raise ValueError(f"Axes and shape mismatch: {axes}, {shape}.")
 
             _spacing = deepcopy(spacing)
             spacing = {n: _spacing[o] for o, n in zip(_axes, axes) if o in _spacing}
