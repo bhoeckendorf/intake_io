@@ -194,6 +194,8 @@ def save_tif(image: Any, uri: str, compress: bool):
             "hyperstack": True,
             "mode": "composite"
         }
+        for field in ("unit", "yunit", "zunit", "tunit"):
+            args["metadata"][field] = args["metadata"][field].encode("latin-1", "backslashreplace").decode("utf-8")
 
     pixels = _reorder_axes(image.data, axes, "itzcyx")
     tifffile.imsave(uri, pixels, **args)
