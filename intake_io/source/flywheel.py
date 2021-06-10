@@ -31,7 +31,7 @@ class FlywheelSource(ImageSource):
             self._hostname, self._container_id, self._filename = parts
         except AttributeError:
             try:
-                self._container_id, self._filename = re.search(r"flywheel:/(.+)/(.+)", self.uri).groups()
+                self._container_id, self._filename = re.search(r"flywheel:/{1,2}(.+)/(.+)", self.uri).groups()
                 self._hostname = "flywheel.stjude.org"
                 self.uri = f"flywheel://{self._hostname}/{self._container_id}/{self._filename}"
             except AttributeError:
