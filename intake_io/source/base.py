@@ -5,7 +5,7 @@ import numpy as np
 from intake.source.base import DataSource, Schema
 from yaml import dump as _dump
 
-from ..util import _get_spacing_dicts, _reorder_axes
+from ..util import _get_spacing_dicts, _reorder_axes, get_axes, to_xarray
 
 
 class ImageSource(DataSource):
@@ -15,6 +15,29 @@ class ImageSource(DataSource):
         self._output_axis_order = output_axis_order
         if self._output_axis_order is not None and len(set(self._output_axis_order)) != len(self._output_axis_order):
             raise ValueError(f"Duplicate axis in {self._output_axis_order}.")
+
+    def to_xarray(self, partition=None):
+        self._load_metadata()
+        axes = self.metadata.get("axes") or get_axes(self.shape)
+        spacing = self.metadata.get("spacing") or {}
+        spacing_units = self.metadata.get("spacing_units") or {}
+        coords = self.metadata.get("coords") or {}
+
+        if partition is not None:
+            if spacing is not None and axes[0] in "tzyx":
+                spacing = spacing[1:]
+            axes = axes[1:]
+            img = to_xarray(self.read_partition(partition), spacing, axes, coords, spacing_units)
+        else:
+            img = to_xarray(self.read(), spacing, axes, coords, spacing_units)
+
+        img.attrs["metadata"] = self.metadata
+        try:
+            img.attrs["uri"] = self.uri
+        except AttributeError:
+            pass
+
+        return img
 
     def _set_shape_metadata(
             self,

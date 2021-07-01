@@ -42,7 +42,9 @@ def imload(uri: str, partition: Any = None, metadata_only: bool = False, **kwarg
     if isinstance(uri, intake.DataSource):
         if metadata_only:
             return uri.discover()
-        out = xr.Dataset({"image": to_xarray(uri, partition=partition)})
+        out = _to_xarray(uri, partition=partition)
+        if not isinstance(out, xr.Dataset):
+            out = xr.Dataset({"image": out})
         out.attrs["metadata"] = {}
         try:
             out.attrs["metadata"]["spacing_units"] = out["image"].attrs["metadata"]["spacing_units"]

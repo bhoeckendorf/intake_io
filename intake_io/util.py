@@ -279,54 +279,7 @@ def to_xarray(
         return xr.DataArray(image, dims=list(axes), coords=coords, name=name, attrs=attrs)
 
     elif isinstance(image, intake.DataSource):
-        image.discover()
-
-        if axes is None:
-            try:
-                axes = image.metadata["axes"]
-            except KeyError:
-                axes = get_axes(image.shape)
-
-        if spacing is None:
-            try:
-                spacing = image.metadata["spacing"]
-            except KeyError:
-                pass
-
-        if spacing_units is None:
-            try:
-                spacing_units = image.metadata["spacing_units"]
-            except KeyError:
-                pass
-
-        try:
-            if coords is None:
-                coords = image.metadata["coords"]
-            else:
-                coords = {**image.metadata["coords"], **coords}
-        except KeyError:
-            pass
-
-        if partition is not None:
-            if spacing is not None and axes[0] in "tzyx":
-                spacing = spacing[1:]
-            axes = axes[1:]
-            img = to_xarray(image.read_partition(partition), spacing, axes, coords, spacing_units, name, attrs)
-        else:
-            img = to_xarray(image.read(), spacing, axes, coords, spacing_units, name, attrs)
-
-        if "metadata" not in img.attrs:
-            img.attrs["metadata"] = image.metadata
-        else:
-            img.attrs["metadata"] = {**image.metadata, **img.attrs["metadata"]}
-
-        if "uri" not in img.attrs:
-            try:
-                img.attrs["uri"] = image.uri
-            except (AttributeError, KeyError):
-                pass
-
-        return img
+        return image.to_xarray()
 
     elif isinstance(image, intake.catalog.entry.CatalogEntry):
         return to_xarray(image.get(), spacing, axes, coords, name, attrs, partition)
