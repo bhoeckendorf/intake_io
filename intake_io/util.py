@@ -1,6 +1,6 @@
 import os
 from copy import deepcopy
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, Optional, Tuple, Union, Generator
 
 import dask.array as da
 import intake
@@ -408,6 +408,9 @@ def _reorder_axes(array: np.ndarray, axes_source: str, axes_target: Optional[str
     if len(axes_target) > len(axes_source):
         axes_target = "".join(i for i in axes_target if i in axes_source)
 
+    if axes_source == axes_target:
+        return array
+
     for i in (axes_source, axes_target):
         if not len(set(i)) == len(i):
             raise ValueError(f"Duplicate axis in {i}.")
@@ -429,6 +432,78 @@ def _reorder_axes(array: np.ndarray, axes_source: str, axes_target: Optional[str
     if len(reorder) < 2 or all(reorder[i] + 1 == reorder[i + 1] for i in range(len(reorder) - 1)):
         return array
     return np.ascontiguousarray(array.transpose(*reorder))
+
+
+def _reorder_xaxes(image, axes_target: Optional[str] = None) -> np.ndarray:
+    if axes_target is None:
+        axes_target = "itczyx"
+    axes_source = get_axes(image)
+    if len(axes_target) > len(axes_source):
+        axes_target = "".join(i for i in axes_target if i in axes_source)
+
+    if axes_source == axes_target:
+        return image
+
+    if isinstance(image, xr.Dataset):
+        out = xr.Dataset({k: _reorder_xaxes(v, axes_target) for k, v in image.items()})
+        out.attrs = image.attrs
+    else:
+        out = xr.DataArray(
+            _reorder_axes(image.data, axes_source, axes_target),
+            image.coords,
+            list(axes_target),
+            image.name,
+            image.attrs,
+        )
+    return out
+
+
+def partition_gen(
+        image: Union[xr.DataArray, xr.Dataset],
+        inner_axes: str,
+        uri: str,
+        multikey: bool = False,
+        sep: str = "."
+) -> Generator[Tuple[Union[xr.DataArray, xr.Dataset], str], None, None]:
+    axes = get_axes(image)
+    outer_axes = "".join(i for i in axes if i not in inner_axes)
+
+    uri_base, uri_ext = os.path.splitext(uri)
+    int_paddings = [j for j in outer_axes if np.all([np.issubdtype(i.dtype, np.integer) for i in image.coords[j].data])]
+    int_paddings = {i: len(str(np.max(image.coords[i].data))) for i in int_paddings}
+
+    if isinstance(image, xr.Dataset) and not multikey:
+        for key, img in image.items():
+            if len(image.keys()) > 1:
+                _uri = os.path.splitext(uri)
+                _uri = _uri[0] + sep + key + _uri[1]
+            else:
+                _uri = uri
+            for out in partition_gen(img, inner_axes, _uri, multikey, sep):
+                yield out
+        return
+
+    if isinstance(image, xr.Dataset):
+        for img in image.values():
+            if img.ndim == len(axes):
+                arr = img.data
+    else:
+        arr = image.data
+
+    with np.nditer(arr, flags=("multi_index",), op_flags=("readonly",), op_axes=[[axes.index(i) for i in outer_axes],]) as ndit:
+        for it in ndit:
+            ix = dict(zip(outer_axes, ndit.multi_index))
+            ix = {ax: image.coords[ax].data[ix] for ax, ix in ix.items()}
+            out = _reorder_xaxes(image.sel(**ix), inner_axes)
+
+            uri_out = [uri_base]
+            for ax in outer_axes:
+                if ax in int_paddings:
+                    uri_out.append(f"{ax.upper()}{str(ix[ax]).rjust(int_paddings[ax], '0')}")
+                else:
+                    uri_out.append(f"{ax.upper()}{ix[ax]}")
+
+            yield out, sep.join(uri_out) + uri_ext
 
 
 def clean_yaml(data: Dict[str, Any], rename_to: Optional[str] = None) -> Dict[str, Any]:
