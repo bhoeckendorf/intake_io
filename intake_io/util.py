@@ -416,7 +416,8 @@ def partition_gen(
         inner_axes: str,
         uri: str,
         multikey: bool = False,
-        sep: str = "."
+        sep_outer: str = ".",
+        sep_inner: str = "_"
 ) -> Generator[Tuple[Union[xr.DataArray, xr.Dataset], str], None, None]:
     axes = get_axes(image)
     outer_axes = "".join(i for i in axes if i not in inner_axes)
@@ -429,10 +430,10 @@ def partition_gen(
         for key, img in image.items():
             if len(image.keys()) > 1:
                 _uri = os.path.splitext(uri)
-                _uri = _uri[0] + sep + key + _uri[1]
+                _uri = f"{_uri[0]}{sep_outer}var{sep_inner}{key}{_uri[1]}"
             else:
                 _uri = uri
-            for out in partition_gen(img, inner_axes, _uri, multikey, sep):
+            for out in partition_gen(img, inner_axes, _uri, multikey, sep_outer, sep_inner):
                 yield out
         return
 
@@ -452,11 +453,11 @@ def partition_gen(
             uri_out = [uri_base]
             for ax in outer_axes:
                 if ax in int_paddings:
-                    uri_out.append(f"{ax.upper()}{str(ix[ax]).rjust(int_paddings[ax], '0')}")
+                    uri_out.append(f"{ax.upper()}{sep_inner}{str(ix[ax]).rjust(int_paddings[ax], '0')}")
                 else:
-                    uri_out.append(f"{ax.upper()}{ix[ax]}")
+                    uri_out.append(f"{ax.upper()}{sep_inner}{ix[ax]}")
 
-            yield out, sep.join(uri_out) + uri_ext
+            yield out, sep_outer.join(uri_out) + uri_ext
 
 
 def clean_yaml(data: Dict[str, Any], rename_to: Optional[str] = None) -> Dict[str, Any]:
