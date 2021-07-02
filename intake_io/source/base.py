@@ -1,6 +1,7 @@
 from copy import deepcopy
 from typing import Any, Dict, Optional, Tuple, Union
 
+import fsspec
 import numpy as np
 from intake.source.base import DataSource, Schema
 from yaml import dump as _dump
@@ -10,11 +11,19 @@ from ..util import _get_spacing_dicts, _reorder_axes, get_axes, to_xarray
 
 class ImageSource(DataSource):
 
-    def __init__(self, *args, output_axis_order: Optional[str] = "itczyx", **kwargs):
+    def __init__(self, uri: str, *args, output_axis_order: Optional[str] = "itczyx", **kwargs):
         super().__init__(*args, **kwargs)
+        self.uri = uri
         self._output_axis_order = output_axis_order
         if self._output_axis_order is not None and len(set(self._output_axis_order)) != len(self._output_axis_order):
             raise ValueError(f"Duplicate axis in {self._output_axis_order}.")
+
+    def open(self):
+        try:
+            return self.__file
+        except AttributeError:
+            self.__file = fsspec.open(self.uri).open()
+            return self.__file
 
     def to_xarray(self, partition=None):
         self._load_metadata()
@@ -105,6 +114,12 @@ class ImageSource(DataSource):
             self.metadata["coords"] = coords
 
         return tuple(shape[k] for k in self.metadata["axes"])
+
+    def _close(self):
+        try:
+            self.__file.close()
+        except AttributeError:
+            pass
 
     def _set_fileheader(self, header: Dict[Any, Any]):
         metadata = self.metadata.get("fileheader") or {}
