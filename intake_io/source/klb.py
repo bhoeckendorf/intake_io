@@ -1,11 +1,13 @@
+from typing import Any, Optional
+
 import numpy as np
 import pyklb as klb
-import intake
-from typing import Any, Optional
-from ..util import *
+
+from .base import ImageSource, Schema
+from ..util import get_axes, get_spacing, partition_gen, to_numpy
 
 
-class KlbSource(intake.source.base.DataSource):
+class KlbSource(ImageSource):
     """Intake source for KLB files.
 
     Attributes:
@@ -17,76 +19,47 @@ class KlbSource(intake.source.base.DataSource):
     version = "0.0.1"
     partition_access = False
 
-    def __init__(self, uri: str, metadata: Optional[dict] = None):
+    def __init__(self, uri: str, **kwargs):
         """
         Arguments:
             uri (str): URI (file system path)
             metadata (dict, optional): Extra metadata, handed over to intake
         """
-        super().__init__(metadata=metadata)
-        self.uri = uri
+        super().__init__(uri, **kwargs)
 
-    def _get_schema(self) -> intake.source.base.Schema:
-        h = klb.readheader(self.uri)
+    def _get_schema(self) -> Schema:
+        header = klb.readheader(self.uri)
+        shape = dict(zip("tczyx", header["imagesize_tczyx"]))
+        spacing = dict(zip("tczyx", header["pixelspacing_tczyx"]))
+        axes = "".join(ax for ax, s in shape.items() if s > 1)
+        for ax in [ax for ax in shape.keys() if ax not in axes]:
+            shape.pop(ax)
+            spacing.pop(ax)
+        units = {ax: "s" if ax == "t" else "μm" for ax in spacing.keys()}
 
-        shape = h["imagesize_tczyx"]
-        n_leading_ones = 0
-        for i in shape:
-            if i < 2:
-                n_leading_ones += 1
-            else:
-                break
-        shape = shape[n_leading_ones:]
-
-        return intake.source.base.Schema(
-            datashape=tuple(shape),
-            shape=tuple(shape),
-            dtype=np.dtype(h["datatype"]),
+        shape = self._set_shape_metadata(axes, shape, spacing, units)
+        self._set_fileheader(header)
+        return Schema(
+            dtype=np.dtype(header["datatype"]),
+            shape=shape,
             npartitions=1,
-            chunks=None,
-            extra_metadata=dict(
-                axes="tczyx"[-len(shape):],
-                spacing=h["pixelspacing_tczyx"][-len(shape):],
-                spacing_units=None,
-                coords=None,
-                fileheader=h
-            )
+            chunks=None
         )
 
     def _get_partition(self, i: int) -> np.ndarray:
-        return klb.readfull(self.uri).squeeze()
-
-    def _close(self):
-        pass
+        return self._reorder_axes(klb.readfull(self.uri).squeeze())
 
 
-def save_klb(image: Any, uri: str, compress: bool):
-    if isinstance(image, xr.Dataset):
-        if len(image) == 1:
-            save_klb(image[list(image.keys())[0]], uri, compress)
-        else:
-            for k in image.keys():
-                uri_key = re.sub(".klb", f".{k}.klb", uri, flags=re.IGNORECASE)
-                save_klb(image[k], uri_key, compress)
-        return
+def save_klb(image: Any, uri: str, compress: Optional[bool] = None, partition: Optional[str] = None):
+    if compress is None:
+        compress = True
+    if partition is None:
+        partition = "tczyx"
 
-    assert image.ndim < 6
-
-    shape_out = []
-    spacing_out = []
-    for i, d in enumerate("tczyx"):
-        if not d in image.dims:
-            if len(shape_out) == 0:
-                continue
-            shape_out.append(1)
-            spacing_out.append(1.0)
-        else:
-            shape_out.append(image.dims[d])
-            spacing_out.append(image.coords[d][1] - image.coords[d][0])
-
-    klb.writefull(
-        to_numpy(image).reshape(shape_out),
-        uri,
-        pixelspacing_tczyx = np.asarray(spacing_out, dtype=np.float32),
-        compression = "bzip" if compress else "none"
-    )
+    compress = "bzip2" if compress else "none"
+    for img, _uri in partition_gen(image, partition, uri):
+        axes = get_axes(img)
+        shape = [img.shape[axes.index(ax)] if ax in axes else 1 for ax in "tczyx"]
+        spacing = [get_spacing(img, ax) or 1.0 for ax in "tczyx"]
+        # TODO: Convert spacing units to match convention.
+        klb.writefull(to_numpy(img).reshape(shape), _uri, pixelspacing_tczyx=spacing, compression=compress)

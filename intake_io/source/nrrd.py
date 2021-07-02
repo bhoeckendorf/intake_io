@@ -1,12 +1,10 @@
-import re
-from typing import Any
+from typing import Any, Optional
 
 import nrrd
 import numpy as np
-import xarray as xr
 
 from .base import ImageSource, Schema
-from ..util import get_axes, get_spacing, get_spacing_units, to_numpy
+from ..util import get_axes, get_spacing, get_spacing_units, partition_gen, to_numpy
 
 
 class NrrdSource(ImageSource):
@@ -27,24 +25,23 @@ class NrrdSource(ImageSource):
             uri (str): URI (file system path)
             metadata (dict, optional): Extra metadata, handed over to intake
         """
-        super().__init__(**kwargs)
-        self.uri = uri
+        super().__init__(uri, **kwargs)
 
     def _get_schema(self) -> Schema:
-        header = dict(nrrd.read_header(self.uri, {"channels": "quoted string list"}))
+        self._header = dict(nrrd.read_header(self.open(), {"channels": "quoted string list"}))
 
-        shape = tuple(header["sizes"])[::-1]
+        shape = tuple(self._header["sizes"])[::-1]
         try:
-            axes = "".join(header["labels"])[::-1]
+            axes = "".join(self._header["labels"])[::-1]
         except KeyError:
             axes = get_axes(shape)
         unit_axes = "".join(i for i in axes if i in "tzyx")
 
         try:
-            spacing = tuple(header["spacings"])[::-1]
+            spacing = tuple(self._header["spacings"])[::-1]
         except KeyError:
             try:
-                spacing = header["space directions"]
+                spacing = self._header["space directions"]
                 spacing = tuple([spacing[d, d] for d in range(spacing.shape[0])])[::-1]
             except KeyError:
                 spacing = ()
@@ -54,10 +51,10 @@ class NrrdSource(ImageSource):
             spacing = {}
 
         try:
-            units = tuple(header["units"])[::-1]
+            units = tuple(self._header["units"])[::-1]
         except KeyError:
             try:
-                units = tuple(header["space units"])[::-1]
+                units = tuple(self._header["space units"])[::-1]
             except KeyError:
                 units = ()
         if len(units) == len(unit_axes):
@@ -65,60 +62,85 @@ class NrrdSource(ImageSource):
         else:
             units = {}
 
-        coords = {"c": header["channels"]} if header.get("channels") else None
+        coords = {"c": self._header["channels"]} if self._header.get("channels") else None
 
         shape = self._set_shape_metadata(axes, shape, spacing, units, coords)
-        self._set_fileheader(header)
+        self._set_fileheader(self._header)
+
+        try:
+            dtype = np.dtype(self._header["type"])
+        except TypeError:
+            dtype = {
+                "char": np.int8,
+                "short": np.int16,
+                "int": np.int32,
+                "long": np.int64,
+
+                "signed char": np.int8,
+                "signed short": np.int16,
+                "signed int": np.int32,
+                "signed long": np.int64,
+
+                "unsigned char": np.uint8,
+                "unsigned short": np.uint16,
+                "unsigned int": np.uint32,
+                "unsigned long": np.uint64,
+
+                "uchar": np.uint8,
+                "ushort": np.uint16,
+                "uint": np.uint32,
+                "ulong": np.uint64,
+
+                "float": np.float32,
+                "double": np.float64
+            }[self._header["type"]]
+
         return Schema(
-            dtype=np.dtype(header["type"]),
+            dtype=dtype,
             shape=shape,
             npartitions=1,
             chunks=None
         )
 
     def _get_partition(self, i: int) -> np.ndarray:
-        # with open(self.url, "rb") as f:
-        #    return nrrd.read_data(self._header, fh=f, filename=self.url, index_order="C")
-        return self._reorder_axes(nrrd.read(self.uri, {"channels": "quoted string list"}, "C")[0])
+        # return self._reorder_axes(nrrd.read_data(self._header, fh=self.open(), index_order="C"))
+        return self._reorder_axes(nrrd.read(self.open(), {"channels": "quoted string list"}, "C")[0])
 
     def _close(self):
         pass
 
 
-def save_nrrd(image: Any, uri: str, compress: bool):
-    if isinstance(image, xr.Dataset):
-        if len(image) == 1:
-            save_nrrd(image[list(image.keys())[0]], uri, compress)
-        else:
-            for k in image.keys():
-                uri_key = re.sub(".nrrd", f".{k}.nrrd", uri, flags=re.IGNORECASE)
-                save_nrrd(image[k], uri_key, compress)
-        return
+def save_nrrd(image: Any, uri: str, compress: Optional[bool] = None, partition: Optional[str] = None):
+    if compress is None:
+        compress = True
+    if partition is None:
+        partition = "itczyx"
 
-    axes = list(get_axes(image))[::-1]
-    kinds = {"i": "list", "t": "time", "c": "list"}
-    header = {
-        "space dimension": sum(i in axes for i in "tzyx"),
-        "sizes": image.shape[::-1],
-        "labels": axes,
-        "kinds": [kinds.get(i) or "space" for i in axes],
-        "encoding": "gzip" if compress else "raw"
-    }
+    for img, _uri in partition_gen(image, partition, uri):
+        axes = list(get_axes(img))[::-1]
+        kinds = {"i": "list", "t": "time", "c": "list"}
+        header = {
+            "space dimension": sum(i in axes for i in "tzyx"),
+            "sizes": img.shape[::-1],
+            "labels": axes,
+            "kinds": [kinds.get(i) or "space" for i in axes],
+            "encoding": "gzip" if compress else "raw"
+        }
 
-    header["spacings"] = []
-    header["units"] = []
-    for ax in [i for i in axes if i in "tzyx"]:
-        header["spacings"].append(get_spacing(image, ax) or np.NaN)
-        header["units"].append(get_spacing_units(image, ax) or "")
-    header["space units"] = header["units"]
+        header["spacings"] = []
+        header["units"] = []
+        for ax in [i for i in axes if i in "tzyx"]:
+            header["spacings"].append(get_spacing(img, ax) or np.NaN)
+            header["units"].append(get_spacing_units(image, ax) or "")
+        header["space units"] = header["units"]
 
-    space = np.eye(sum(ax in axes for ax in "zyx"))
-    for i, s in enumerate(get_spacing(image, ax) or 1.0 for ax in [i for i in axes if i in "zyx"]):
-        space[i, i] = s
-    header["space directions"] = space
+        space = np.eye(sum(ax in axes for ax in "zyx"))
+        for i, s in enumerate(get_spacing(img, ax) or 1.0 for ax in [i for i in axes if i in "zyx"]):
+            space[i, i] = s
+        header["space directions"] = space
 
-    if "c" in image.coords:
-        header["channels"] = tuple(map(str, image.coords["c"].data))
+        if "c" in image.coords:
+            header["channels"] = tuple(map(str, img.coords["c"].data))
 
-    nrrd.write(uri, to_numpy(image), header, compression_level=4, index_order="C",
-               custom_field_map={"channels": "quoted string list"})
+        nrrd.write(_uri, to_numpy(img), header, compression_level=4, index_order="C",
+                   custom_field_map={"channels": "quoted string list"})

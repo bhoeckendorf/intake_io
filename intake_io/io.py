@@ -11,6 +11,11 @@ from .source.klb import save_klb
 from .source.nifti import save_nifti
 from .source.nrrd import save_nrrd
 
+from .source.klb import save_klb as _save_klb
+from .source.nifti import save_nifti as _save_nifti
+from .source.nrrd import save_nrrd as _save_nrrd
+from .source.tif import save_tif as _save_tif
+from .util import to_xarray as _to_xarray
 
 def imload(uri: str, partition: Any = None, metadata_only: bool = False, **kwargs) -> xr.Dataset:
     """
@@ -65,21 +70,22 @@ def imsave(image: Any, uri: str, compress: bool = True):
         ext = ".zarr"
 
     if ext == ".nrrd":
-        save_nrrd(image, uri, compress)
+        _save_nrrd(image, uri, compress, partition)
     elif ext == ".zarr":
-        save_zarr(image, uri, compress)
+        _save_zarr(image, uri, compress)
     elif ext == ".tif":
-        save_tif(image, uri, compress)
-    elif luri.endswith(".nii.gz"):
-        save_nifti(image, uri, compress)
+        _save_tif(image, uri, compress, partition)
     elif ext == ".klb":
-        save_klb(image, uri, compress)
+        _save_klb(image, uri, compress, partition)
     else:
         raise NotImplementedError(f"intake_io.imsave(...) with file extension '{ext}'")
 
 
-def save_zarr(image: Any, uri: str, compress: bool):
-    #image = image.chunk({"i": 1})
+def _save_zarr(image: Any, uri: str, compress: Optional[bool] = None):
+    if compress is None:
+        compress = True
+
+    # image = image.chunk({"i": 1})
     if compress:
         compressor = zarr.Blosc(cname="zstd", clevel=4)
         encoding = {k: {"compressor": compressor} for k in image.keys()}

@@ -1,13 +1,11 @@
-import re
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import tifffile
-import xarray as xr
 
 from .base import ImageSource, Schema
 from .bioformats import _parse_ome_metadata
-from ..util import _reorder_axes, get_axes, get_spacing, get_spacing_units
+from ..util import get_axes, get_spacing, get_spacing_units, partition_gen
 
 
 class TifSource(ImageSource):
@@ -28,13 +26,12 @@ class TifSource(ImageSource):
             uri (str): URI (e.g. file system path or URL)
             metadata (dict, optional): Extra metadata, handed over to intake
         """
-        super().__init__(**kwargs)
-        self.uri = uri
+        super().__init__(uri, **kwargs)
         self._file = None
 
     def _get_schema(self) -> Schema:
         if self._file is None:
-            self._file = tifffile.TiffFile(self.uri)
+            self._file = tifffile.TiffFile(self.open())
 
         # TODO: Support loading multiple series.
         if len(self._file.series) > 1:
@@ -90,7 +87,10 @@ class TifSource(ImageSource):
                 continue
             if isinstance(v, tuple):
                 assert len(v) == 2
-                v = v[1] / v[0]
+                if v[0] == 0:
+                    v = v[1]
+                else:
+                    v = v[1] / v[0]
             spacing[ax] = v
 
         try:
@@ -156,37 +156,30 @@ class TifSource(ImageSource):
             self._file.close()
 
 
-def save_tif(image: Any, uri: str, compress: bool):
-    if isinstance(image, xr.Dataset):
-        if len(image) == 1:
-            save_tif(image[list(image.keys())[0]], uri, compress)
-        else:
-            for k in image.keys():
-                uri_key = re.sub(".tif", f".{k}.tif", uri, flags=re.IGNORECASE)
-                # TODO: handle .tiff, .ome.tif etc
-                save_tif(image[k], uri_key, compress)
-        return
+def save_tif(image: Any, uri: str, compress: Optional[bool] = None, partition: Optional[str] = None):
+    if compress is None:
+        compress = False
+    if partition is None:
+        partition = "tzcyx"
 
-    # TODO: Support saving multiple series.
-    if "i" in image.coords and len(image.coords["i"]) > 1:
-        raise ValueError(
-            f"Saving multiple series in one TIF file is currently unsupported. {uri} would contain {len(image.coords['i'])} series.")
+    for img, _uri in partition_gen(image, partition, uri):
+        args = {}
+        if compress:
+            args["compression"] = "deflate"
+        args["resolution"] = tuple(1. / (get_spacing(image, i) or 1.) for i in "xy")
 
-    axes = get_axes(image)
-    args = {}
-    args["resolution"] = tuple(1. / (get_spacing(image, i) or 1.) for i in "xy")
+        # ImageJ doesn't support all dtypes
+        if img.dtype not in (np.int8, np.int32, np.int64, np.uint32, np.uint64, np.float64):
+            args["imagej"] = True
 
-    # ImageJ doesn't support all dtypes
-    if image.dtype not in (np.int8, np.int32, np.int64, np.uint32, np.uint64, np.float64):
-        args["imagej"] = True
         args["metadata"] = {
-            "axes": "".join(i for i in "itzcyx" if i in axes).upper(),
-            "images": np.prod(image.shape[:-2]),
-            "frames": len(image.coords["t"]) if "t" in image.coords else 1,
-            "channels": len(image.coords["c"]) if "c" in image.coords else 1,
-            "slices": len(image.coords["z"]) if "z" in image.coords else 1,
-            "finterval": get_spacing(image, "t") or 0.0,
-            "spacing": get_spacing(image, "z") or 1.0,
+            "axes": get_axes(img).upper(),
+            "images": np.prod(img.shape[:-2]),
+            "frames": len(img.coords["t"]) if "t" in img.coords else 1,
+            "channels": len(img.coords["c"]) if "c" in img.coords else 1,
+            "slices": len(img.coords["z"]) if "z" in img.coords else 1,
+            "finterval": get_spacing(img, "t") or 0.0,
+            "spacing": get_spacing(img, "z") or 1.0,
             "unit": get_spacing_units(image, "x") or "pixel",
             "yunit": get_spacing_units(image, "y") or "pixel",
             "zunit": get_spacing_units(image, "z") or "pixel",
@@ -197,5 +190,4 @@ def save_tif(image: Any, uri: str, compress: bool):
         for field in ("unit", "yunit", "zunit", "tunit"):
             args["metadata"][field] = args["metadata"][field].encode("latin-1", "backslashreplace").decode("utf-8")
 
-    pixels = _reorder_axes(image.data, axes, "itzcyx")
-    tifffile.imsave(uri, pixels, **args)
+        tifffile.imsave(_uri, img.data, **args)

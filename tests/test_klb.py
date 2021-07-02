@@ -7,13 +7,11 @@ from .fixtures import *
 
 
 def test_round_trip_uncompressed(tmp_path):
-    fpath = os.path.join(tmp_path, "uncompressed.tif")
+    fpath = os.path.join(tmp_path, "uncompressed.klb")
     if os.path.exists(fpath):
         os.remove(fpath)
 
     for img0, shape, axes, spacing, units in random_images():
-        if img0.dtype in (np.int8, np.int32, np.int64, np.uint32, np.uint64, np.float64):
-            continue
         if "i" in axes:
             continue
         try:
@@ -21,13 +19,14 @@ def test_round_trip_uncompressed(tmp_path):
             intake_io.imsave(img0, fpath, compress=False)
             assert os.path.exists(fpath)
 
-            with intake_io.source.TifSource(fpath) as src:
+            with intake_io.source.KlbSource(fpath) as src:
                 img1 = intake_io.imload(src)["image"]
-
+            
             assert axes == intake_io.get_axes(img1)
             assert shape == img1.shape
-            assert spacing == intake_io.get_spacing(img1)
-            assert units == intake_io.get_spacing_units(img1)
+            _spacing = [1.0 if i is None else i for i in spacing]
+            np.testing.assert_array_almost_equal(_spacing, intake_io.get_spacing(img1))
+            # assert units == intake_io.get_spacing_units(img1)
             assert np.mean(img0.data) not in (0, 1)
             assert np.mean(img0.data) == np.mean(img1.data)
         finally:
@@ -37,16 +36,14 @@ def test_round_trip_uncompressed(tmp_path):
 
 def test_round_trip_compressed(tmp_path):
     fpaths = {
-        False: os.path.join(tmp_path, "uncompressed.tif"),
-        True: os.path.join(tmp_path, "compressed.tif")
+        False: os.path.join(tmp_path, "uncompressed.klb"),
+        True: os.path.join(tmp_path, "compressed.klb")
     }
     for fpath in fpaths.values():
         if os.path.exists(fpath):
             os.remove(fpath)
 
     for img0 in ramp_images():
-        if img0.dtype in (np.int8, np.int32, np.int64, np.uint32, np.uint64, np.float64):
-            continue
         if "i" in intake_io.get_axes(img0):
             continue
         try:
@@ -58,7 +55,7 @@ def test_round_trip_compressed(tmp_path):
                 intake_io.imsave(img0, fpath, compress=compress)
                 assert os.path.exists(fpath)
 
-                with intake_io.source.TifSource(fpath) as src:
+                with intake_io.source.KlbSource(fpath) as src:
                     img1 = intake_io.imload(src)["image"]
                 img2 = intake_io.imload(fpath)["image"]
                 
