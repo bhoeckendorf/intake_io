@@ -18,8 +18,9 @@ pip install git+https://github.com/bhoeckendorf/pyklb.git@skbuild git+https://gi
 pip install git+https://github.com/bhoeckendorf/pyklb.git@skbuild git+https://github.com/bhoeckendorf/intake_io.git
 ```
 
-## Updating intake_io
+## Updating
+The following command updates intake_io to current master branch without touching any other packages:
 
-```bash
-pip install --no-deps --force-reinstall git+https://github.com/bhoeckendorf/intake_io.git
+```sh
+pip install --no-deps --force-reinstall --no-cache-dir git+https://github.com/bhoeckendorf/intake_io.git
 ```

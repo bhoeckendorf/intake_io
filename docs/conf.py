@@ -30,10 +30,17 @@ author = 'Burkhard Hoeckendorf <burkhard.hoeckendorf@pm.me>'
 import sphinx_rtd_theme
 
 extensions = [
-    'autoapi.extension',
-    'recommonmark',
+    # 'sphinx.ext.autodoc',
+    # 'sphinx.ext.inheritance_diagram',
     'sphinx.ext.intersphinx',
-    'sphinx_rtd_theme'
+    # 'autoapi.sphinx',
+    'autoapi.extension',
+    # 'myst_parser',
+    # 'myst_nb',
+    'sphinx_rtd_theme',
+    'recommonmark',
+    'sphinx_markdown_tables',
+    'nbsphinx'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -42,7 +49,7 @@ templates_path = ['_templates']
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns = ['_build', '**.ipynb_checkpoints']
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -66,6 +73,13 @@ source_suffix = {
 
 autoapi_type = 'python'
 autoapi_dirs = ['../intake_io']
+autoapi_options = ['members', 'undoc-members', 'imported-members', 'show-inheritance', 'show-module-summary']
+autoapi_python_class_content = 'both'
+
+# nbsphinx_execute_arguments = [
+#     "--InlineBackend.figure_formats={'svg', 'pdf'}",
+#     "--InlineBackend.rc=figure.dpi=96",
+# ]
 
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),

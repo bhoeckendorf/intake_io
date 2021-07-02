@@ -3,8 +3,11 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - recommonmark
+  - myst-nb
+  - myst-parser
   - sphinx-autoapi
   - sphinx-autobuild
-  - sphinx-markdown-tables
   - sphinx_rtd_theme
+  - recommonmark
+  - sphinx-markdown-tables
+  - nbsphinx
