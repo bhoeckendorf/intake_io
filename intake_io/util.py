@@ -433,8 +433,7 @@ def partition_gen(
                 _uri = f"{_uri[0]}{sep_outer}var{sep_inner}{key}{_uri[1]}"
             else:
                 _uri = uri
-            for out in partition_gen(img, inner_axes, _uri, multikey, sep_outer, sep_inner):
-                yield out
+            yield from partition_gen(img, inner_axes, _uri, multikey, sep_outer, sep_inner)
         return
 
     if isinstance(image, xr.Dataset):
