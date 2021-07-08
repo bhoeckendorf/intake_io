@@ -156,16 +156,22 @@ class TifSource(ImageSource):
             self._file.close()
 
 
-def save_tif(image: Any, uri: str, compress: Optional[bool] = None, partition: Optional[str] = None):
-    if compress is None:
-        compress = False
+def save_tif(
+        image: Any,
+        uri: str,
+        compress: bool = False,
+        partition: Optional[str] = None,
+
+        # Format-specific kwargs
+        compression_type: str = "deflate"
+):
     if partition is None:
         partition = "tzcyx"
 
     for img, _uri in partition_gen(image, partition, uri):
         args = {}
         if compress:
-            args["compression"] = "deflate"
+            args["compression"] = compression_type
         args["resolution"] = tuple(1. / (get_spacing(image, i) or 1.) for i in "xy")
 
         # ImageJ doesn't support all dtypes

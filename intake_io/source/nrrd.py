@@ -28,7 +28,7 @@ class NrrdSource(ImageSource):
         super().__init__(uri, **kwargs)
 
     def _get_schema(self) -> Schema:
-        self._header = dict(nrrd.read_header(self.open(), {"channels": "quoted string list"}))
+        self._header = nrrd.read_header(self.open(), {"channels": "quoted string list"})
 
         shape = tuple(self._header["sizes"])[::-1]
         try:
@@ -65,7 +65,7 @@ class NrrdSource(ImageSource):
         coords = {"c": self._header["channels"]} if self._header.get("channels") else None
 
         shape = self._set_shape_metadata(axes, shape, spacing, units, coords)
-        self._set_fileheader(self._header)
+        self._set_fileheader(dict(self._header))
 
         try:
             dtype = np.dtype(self._header["type"])
@@ -103,18 +103,24 @@ class NrrdSource(ImageSource):
         )
 
     def _get_partition(self, i: int) -> np.ndarray:
-        # return self._reorder_axes(nrrd.read_data(self._header, fh=self.open(), index_order="C"))
-        return self._reorder_axes(nrrd.read(self.open(), {"channels": "quoted string list"}, "C")[0])
-
-    def _close(self):
-        pass
+        # return self._reorder_axes(nrrd.read_data(self._header, reader, index_order="C"))
+        return self._reorder_axes(nrrd.read(self.uri, index_order="C")[0])
 
 
-def save_nrrd(image: Any, uri: str, compress: Optional[bool] = None, partition: Optional[str] = None):
-    if compress is None:
-        compress = True
+def save_nrrd(
+        image: Any,
+        uri: str,
+        compress: bool = True,
+        partition: Optional[str] = None,
+
+        # Format-specific kwargs
+        compression_type: str = "gzip",
+        compression_level: int = 4
+):
     if partition is None:
         partition = "itczyx"
+    if not compress:
+        compression_type = "raw"
 
     for img, _uri in partition_gen(image, partition, uri):
         axes = list(get_axes(img))[::-1]
@@ -124,7 +130,7 @@ def save_nrrd(image: Any, uri: str, compress: Optional[bool] = None, partition: 
             "sizes": img.shape[::-1],
             "labels": axes,
             "kinds": [kinds.get(i) or "space" for i in axes],
-            "encoding": "gzip" if compress else "raw"
+            "encoding": compression_type
         }
 
         header["spacings"] = []
@@ -142,5 +148,5 @@ def save_nrrd(image: Any, uri: str, compress: Optional[bool] = None, partition: 
         if "c" in image.coords:
             header["channels"] = tuple(map(str, img.coords["c"].data))
 
-        nrrd.write(_uri, to_numpy(img), header, compression_level=4, index_order="C",
+        nrrd.write(_uri, to_numpy(img), header, compression_level=compression_level, index_order="C",
                    custom_field_map={"channels": "quoted string list"})

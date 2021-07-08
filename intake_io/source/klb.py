@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 import numpy as np
 import pyklb as klb
@@ -50,16 +50,26 @@ class KlbSource(ImageSource):
         return self._reorder_axes(klb.readfull(self.uri).squeeze())
 
 
-def save_klb(image: Any, uri: str, compress: Optional[bool] = None, partition: Optional[str] = None):
-    if compress is None:
-        compress = True
+def save_klb(
+        image: Any,
+        uri: str,
+        compress: bool = True,
+        partition: Optional[str] = None,
+
+        # Format-specific kwargs
+        block_shape: Tuple[int, ...] = None,
+        compression_type: str = "bzip2"
+):
     if partition is None:
         partition = "tczyx"
+    if not compress:
+        compression_type = "none"
+    if block_shape is not None:
+        block_shape = block_shape[::-1]
 
-    compress = "bzip2" if compress else "none"
     for img, _uri in partition_gen(image, partition, uri):
         axes = get_axes(img)
         shape = [img.shape[axes.index(ax)] if ax in axes else 1 for ax in "tczyx"]
         spacing = [get_spacing(img, ax) or 1.0 for ax in "tczyx"]
         # TODO: Convert spacing units to match convention.
-        klb.writefull(to_numpy(img).reshape(shape), _uri, pixelspacing_tczyx=spacing, compression=compress)
+        klb.writefull(to_numpy(img).reshape(shape), _uri, pixelspacing_tczyx=spacing, blocksize_xyzct=block_shape, compression=compression_type)

@@ -64,7 +64,7 @@ def imload(uri: str, partition: Optional[Any] = None, metadata_only: bool = Fals
         return imload(src, partition, metadata_only)
 
 
-def imsave(image: Any, uri: str, compress: Optional[bool] = None, partition: Optional[str] = None):
+def imsave(image: Any, uri: str, compress: Optional[bool] = None, partition: Optional[str] = None, **kwargs):
     """
     Save image, autodetect format.
 
@@ -115,28 +115,40 @@ def imsave(image: Any, uri: str, compress: Optional[bool] = None, partition: Opt
     luri = uri.lower()
     ext = os.path.splitext(luri)[-1]
 
+    if compress is not None:
+        assert "compress" not in kwargs
+        kwargs["compress"] = compress
+
     if len(ext) == 0:
         ext = ".zarr"
 
     if ext == ".nrrd":
-        _save_nrrd(image, uri, compress, partition)
+        _save_nrrd(image, uri, partition=partition, **kwargs)
     elif ext == ".zarr":
-        _save_zarr(image, uri, compress)
+        _save_zarr(image, uri, partition=partition, **kwargs)
     elif ext == ".tif":
-        _save_tif(image, uri, compress, partition)
+        _save_tif(image, uri, partition=partition, **kwargs)
+    elif luri.endswith(".nii.gz") or luri.endswith(".nii"):
+        _save_nifti(image, uri, partition=partition, **kwargs)
     elif ext == ".klb":
-        _save_klb(image, uri, compress, partition)
+        _save_klb(image, uri, partition=partition, **kwargs)
     else:
         raise NotImplementedError(f"intake_io.imsave(...) with file extension '{ext}'")
 
 
-def _save_zarr(image: Any, uri: str, compress: Optional[bool] = None):
-    if compress is None:
-        compress = True
+def _save_zarr(
+        image: Any,
+        uri: str,
+        compress: bool = True,
+        partition: Optional[str] = None,
 
+        # Format-specific kwargs
+        compression_type: str = "zstd",
+        compression_level: int = 4
+):
     # image = image.chunk({"i": 1})
     if compress:
-        compressor = zarr.Blosc(cname="zstd", clevel=4)
+        compressor = zarr.Blosc(cname=compression_type, clevel=compression_level)
         encoding = {k: {"compressor": compressor} for k in image.keys()}
     else:
         encoding = {}
