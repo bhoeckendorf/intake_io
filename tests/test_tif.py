@@ -72,3 +72,17 @@ def test_round_trip_compressed(tmp_path):
             for fpath in fpaths.values():
                 if os.path.exists(fpath):
                     os.remove(fpath)
+
+
+def test_load_from_url():
+    url = "https://downloads.openmicroscopy.org/images/OME-TIFF/2016-06/bioformats-artificial/multi-channel.ome.tif"
+    img = intake_io.imload(url)
+    assert img["image"].shape == (3, 167, 439)
+    assert img["image"].dtype == np.int8
+    assert intake_io.get_axes(img) == "cyx"
+
+    url = "https://downloads.openmicroscopy.org/images/OME-TIFF/2016-06/bioformats-artificial/multi-channel-4D-series.ome.tif"
+    img = intake_io.imload(url)
+    assert img["image"].shape == (7, 3, 5, 167, 439)
+    assert img["image"].dtype == np.int8
+    assert intake_io.get_axes(img) == "tczyx"

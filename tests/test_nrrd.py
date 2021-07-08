@@ -64,3 +64,15 @@ def test_round_trip_compressed(tmp_path):
             for fpath in fpaths.values():
                 if os.path.exists(fpath):
                     os.remove(fpath)
+
+
+def test_load_from_url():
+    url = "http://teem.sourceforge.net/nrrd/files/fool.nrrd"
+    # img = intake_io.imload(url)
+    # assert img["image"].shape == (128, 128)
+    # assert img["image"].dtype == np.uint8
+    # assert intake_io.get_axes(img) == "yx"
+    img = intake_io.imload(url, metadata_only=True)
+    assert img["shape"] == (128, 128)
+    assert img["dtype"] == np.uint8
+    assert img["metadata"]["original_axes"] == "yx"
