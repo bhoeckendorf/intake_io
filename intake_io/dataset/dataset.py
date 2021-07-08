@@ -81,7 +81,7 @@ class IntakeDataset:
 
     @cached_property
     def median_shape(self) -> Tuple[int, ...]:
-        shapes = [self.get_shape(i) for i in self.__len__()]
+        shapes = [self.get_shape(i) for i in range(self.__len__())]
         ndims = np.asarray([len(i) for i in shapes])
         assert np.all(ndims == ndims[0])
         median = np.median(np.asarray(shapes), axis=0)
@@ -93,7 +93,7 @@ class IntakeDataset:
 
     @cached_property
     def median_spacing(self) -> Tuple[float, ...]:
-        spacings = [self.get_spacing(i) for i in self.__len__()]
+        spacings = [self.get_spacing(i) for i in range(self.__len__())]
         ndims = np.asarray([len(i) for i in spacings])
         assert np.all(ndims == ndims[0])
         return tuple(np.median(np.asarray(spacings), axis=0))
