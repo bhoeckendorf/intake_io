@@ -66,8 +66,7 @@ class BioformatsSource(ImageSource):
             uri (str): URI (e.g. file system path or URL)
             metadata (dict, optional): Extra metadata, handed over to intake
         """
-        super().__init__(**kwargs)
-        self.uri = uri
+        super().__init__(uri, **kwargs)
 
     def _get_schema(self) -> Schema:
         # Parse metadata, start a JVM if needed.
