@@ -1,15 +1,14 @@
+import os
 import re
+from functools import cached_property
 from gzip import GzipFile
-from io import BytesIO
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
-import nibabel
+import nibabel as nib
 import numpy as np
-import xarray as xr
-from nibabel import Nifti1Image
 
 from .base import ImageSource, Schema
-from ..util import get_axes, get_spacing, to_numpy
+from ..util import get_axes, get_spacing, get_spacing_units, partition_gen
 
 
 class NiftiSource(ImageSource):
@@ -24,20 +23,40 @@ class NiftiSource(ImageSource):
     version = "0.0.1"
     partition_access = False
 
-    def __init__(self, uri: Optional[str], stream: Optional[Union[BytesIO, GzipFile]] = None, **kwargs):
+    def __init__(self, uri: str, **kwargs):
         """
         Arguments:
             uri (str): URI (file system path)
             metadata (dict, optional): Extra metadata, handed over to intake
         """
-        super().__init__(**kwargs)
-        self.uri = uri
-        self._filehandle = None if stream is None else Nifti1Image.from_bytes(stream.read())
+        super().__init__(uri, **kwargs)
+        self._streams = []
+
+    def open(self):
+        if len(self._streams) == 0:
+            self._streams.append(super().open())
+            if os.path.splitext(self.uri)[-1].lower() == ".gz" and not isinstance(self._streams[0], GzipFile):
+                self._streams.append(GzipFile(fileobj=self._streams[0], mode="rb"))
+        return self._streams[-1]
+
+    @cached_property
+    def _nifti_version(self):
+        version = None
+        x = np.frombuffer(self.open().peek(4), dtype=np.int32, count=1)
+        for byteorder in ("<", ">"):
+            i = int(x.newbyteorder(byteorder))
+            if i == 348:
+                version = 1
+            elif i == 540:
+                version = 2
+        self._streams[-1].seek(0)
+        return version
 
     def _get_schema(self) -> Schema:
-        if self._filehandle is None:
-            self._filehandle = nibabel.load(self.uri)
-        header = self._filehandle.header
+        if self._nifti_version == 1:
+            header = nib.Nifti1Header.from_fileobj(self.open())
+        else:
+            header = nib.Nifti2Header.from_fileobj(self.open())
 
         dtype = np.dtype(header.get_data_dtype())
         shape = tuple(header.get_data_shape())
@@ -79,31 +98,56 @@ class NiftiSource(ImageSource):
         )
 
     def _get_partition(self, i: int) -> np.ndarray:
-        out = self._reorder_axes(self._filehandle.dataobj.get_unscaled())
-        self._filehandle.uncache()
+        self._streams[-1].seek(0)
+        if self._nifti_version == 2:
+            fh = nib.Nifti2Image.from_bytes(self.open().read())
+        else:
+            fh = nib.Nifti1Image.from_bytes(self.open().read())
+        out = self._reorder_axes(fh.dataobj.get_unscaled())
+        fh.uncache()
         return out
 
     def _close(self):
-        if self._filehandle is not None:
-            self._filehandle.uncache()
+        for stream in self._streams[::-1]:
+            if stream is not None:
+                stream.close()
 
 
-def save_nifti(image: Any, uri: str, compress: bool):
-    if isinstance(image, xr.Dataset):
-        if len(image) == 1:
-            save_nifti(image[list(image.keys())[0]], uri, compress)
+def save_nifti(
+        image: Any,
+        uri: str,
+        compress: bool = True,
+        partition: Optional[str] = None,
+
+        # Format-specific kwargs
+        nifti_version: int = 2
+):
+    if partition is None:
+        partition = "xyz"
+
+    for img, _uri in partition_gen(image, partition, uri):
+        if nifti_version == 1:
+            header = nib.Nifti1Header()
         else:
-            for k in image.keys():
-                uri_key = re.sub(".nii.gz", f".{k}.nii.gz", uri, flags=re.IGNORECASE)
-                save_nifti(image[k], uri_key, compress)
-        return
+            header = nib.Nifti2Header()
 
-    h = nibabel.Nifti2Header()
-    h.set_data_shape(image.shape[::-1])
-    h.set_data_dtype(image.dtype)
-    h.get("pixdim")[1:1 + image.ndim] = get_spacing(image)[::-1]
-    ni = nibabel.Nifti2Image(
-        to_numpy(image).T,
-        affine=np.eye(image.ndim + 1, image.ndim + 1),
-        header=h)
-    nibabel.save(ni, uri)
+        header.set_data_shape(img.shape[::-1])
+        header.set_data_dtype(img.dtype)
+        header.set_xyzt_units(xyz=get_spacing_units(image, "x") or None, t=get_spacing_units(image, "t") or None)
+
+        affine = np.eye(img.ndim + 1, img.ndim + 1)
+        for i, ax in enumerate(get_axes(img)):
+            affine[i, i] = get_spacing(img, ax) or 1.0
+
+        if nifti_version == 1:
+            ni = nib.Nifti1Image(
+                img.data,
+                affine=affine,
+                header=header)
+        else:
+            ni = nib.Nifti2Image(
+                img.data,
+                affine=affine,
+                header=header)
+
+        nib.save(ni, _uri)
