@@ -29,7 +29,7 @@ class ListSource(ImageSource):
             as_float32 (bool, default=False): convert items to float32 pixel type
             metadata (dict, optional): Extra metadata, handed over to intake
         """
-        super().__init__(**kwargs)
+        super().__init__(None, **kwargs)
         self.items = items
         self.axis = axis
         self.as_float32 = as_float32

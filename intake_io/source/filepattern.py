@@ -248,8 +248,7 @@ class FilePatternSource(ImageSource):
         return srcs
 
     def __init__(self, folder, axis_tags, extensions, include_filters=[], exclude_filters=[], ixs=None, source: Optional[ImageSource] = None, **kwargs):
-        super().__init__(**kwargs)
-        self.uri = folder
+        super().__init__(folder, **kwargs)
         self._files = FilePattern(folder, axis_tags, extensions, include_filters, exclude_filters, ixs, source)
 
     def _get_schema(self) -> Schema:
