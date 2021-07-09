@@ -9,11 +9,18 @@ class FlywheelFileSystem(AbstractFileSystem):
     _cached = False
     protocol = "flywheel"
     async_impl = False
-    root_marker = "/"
+    root_marker = ""
 
     def __init__(self, hostname, apikey, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._client = flywheel.Client(f"{hostname}:{apikey.split(':')[-1]}")
+        self._hostname = hostname
+        self._client = flywheel.Client(f"{self._hostname}:{apikey.split(':')[-1]}")
+
+    def _strip_hostname(self, x):
+        x = self._strip_protocol(x)
+        if x.startswith(self._hostname):
+            return x[len(self._hostname):].lstrip(self.sep)
+        return x
 
     def mkdir(self, path, create_parents=True, **kwargs):
         raise NotImplementedError
@@ -25,7 +32,7 @@ class FlywheelFileSystem(AbstractFileSystem):
         raise NotImplementedError
 
     def ls(self, path, detail=False, **kwargs):
-        path = self._strip_protocol(path).rstrip(self.sep)
+        path = self._strip_hostname(path).rstrip(self.sep)
         parent, file = path.rsplit(self.sep, 1)
         if file in ("analyses", "files"):
             # List analyses and files if path ends on "/analyses" or "/files"
@@ -67,6 +74,8 @@ class FlywheelFileSystem(AbstractFileSystem):
         return items
 
     def _ls_name(self, x):
+        if not isinstance(x, str) and self._type(x) == "group":
+            return x.id
         for field in ("label", "name"):
             try:
                 return getattr(x, field)
@@ -111,12 +120,31 @@ class FlywheelFileSystem(AbstractFileSystem):
         out = {}
         if not isinstance(path, str):
             node = path
-            out["name"] = self._ls_name(node)
+            out["name"] = [self._ls_name(node)]
+
+            parent = node
+            while hasattr(parent, "parent"):
+                if self._type(parent) == "analysis":
+                    out["name"].insert(0, "analyses")
+                elif self._type(parent) == "file":
+                    out["name"].insert(0, "files")
+                parent = self._client.get(getattr(parent, "parent")["id"])
+                out["name"].insert(0, self._ls_name(parent))
+            try:
+                parents = parent["parents"]
+                for field in ("acquisition", "session", "subject", "project", "group"):
+                    id = parents.get(field) or None
+                    if id is not None:
+                        out["name"].insert(0, self._ls_name(self._client.get(id)))
+            except KeyError:
+                pass
+
+            out["name"] = self.sep.join(out["name"])
             out["type"] = self._type(node)
         else:
-            out["name"] = self._strip_protocol(path).rstrip(self.sep)
+            out["name"] = self._strip_hostname(path).rstrip(self.sep)
             out["type"] = self._type(out["name"])
-            node = self._client.lookup(out["name"])        
+            node = self._client.lookup(out["name"])
         out["size"] = self.size(node)
         out["created"] = self.created(node)
         out["modified"] = self.modified(node)
@@ -128,7 +156,7 @@ class FlywheelFileSystem(AbstractFileSystem):
             return "file"
 
         if isinstance(path, str):
-            path = self._strip_protocol(path).rstrip(self.sep).split(self.sep)
+            path = self._strip_hostname(path).rstrip(self.sep).split(self.sep)
             if path[-1] in ("analyses", "files"):
                 return "directory"
             if path[-2] == "analyses":
@@ -145,17 +173,17 @@ class FlywheelFileSystem(AbstractFileSystem):
                 return "acquisition"
             else:
                 raise ValueError(f'Unknown type at path "{self.sep.join(path)}"')
-        elif isinstance(path, (flywheel.models.group.Group, flywheel.models.resolver_group_node.ResolverGroupNode)):
+        elif isinstance(path, (flywheel.models.group.Group, flywheel.models.resolver_group_node.ResolverGroupNode, flywheel.models.container_group_output.ContainerGroupOutput)):
             return "group"
-        elif isinstance(path, (flywheel.models.project.Project, flywheel.models.resolver_project_node.ResolverProjectNode)):
+        elif isinstance(path, (flywheel.models.project.Project, flywheel.models.resolver_project_node.ResolverProjectNode, flywheel.models.container_project_output.ContainerProjectOutput)):
             return "project"
-        elif isinstance(path, (flywheel.models.subject.Subject, flywheel.models.resolver_subject_node.ResolverSubjectNode)):
+        elif isinstance(path, (flywheel.models.subject.Subject, flywheel.models.resolver_subject_node.ResolverSubjectNode, flywheel.models.container_subject_output.ContainerSubjectOutput)):
             return "subject"
-        elif isinstance(path, (flywheel.models.session.Session, flywheel.models.resolver_session_node.ResolverSessionNode)):
+        elif isinstance(path, (flywheel.models.session.Session, flywheel.models.resolver_session_node.ResolverSessionNode, flywheel.models.container_session_output.ContainerSessionOutput)):
             return "session"
-        elif isinstance(path, (flywheel.models.acquisition.Acquisition, flywheel.models.resolver_acquisition_node.ResolverAcquisitionNode)):
+        elif isinstance(path, (flywheel.models.acquisition.Acquisition, flywheel.models.resolver_acquisition_node.ResolverAcquisitionNode, flywheel.models.container_acquisition_output.ContainerAcquisitionOutput)):
             return "acquisition"
-        elif isinstance(path, flywheel.models.resolver_analysis_node.ResolverAnalysisNode):
+        elif isinstance(path, (flywheel.models.resolver_analysis_node.ResolverAnalysisNode, flywheel.models.analysis_output.AnalysisOutput)):
             return "analysis"
 
         raise ValueError(f'Unknown type "{type(path)}".')
@@ -172,7 +200,7 @@ class FlywheelFileSystem(AbstractFileSystem):
 
     def isfile(self, path):
         if not isinstance(path, str):
-            return isinstance(path, (flywheel.models.resolver_file_node.ResolverFileNode, flywheel.models.file_entry.FileEntry))
+            return isinstance(path, (flywheel.models.file_entry.FileEntry, flywheel.models.resolver_file_node.ResolverFileNode, flywheel.models.container_file_output.ContainerFileOutput))
         try:
             return path.rstrip(self.sep).rsplit(self.sep, 2)[-2] == "files"
         except IndexError:
@@ -238,7 +266,7 @@ class FlywheelFileSystem(AbstractFileSystem):
         return io.BufferedRandom(file)
 
     def open(self, path, mode="rb", block_size=None, cache_options=None, **kwargs):
-        path = self._strip_protocol(path)
+        path = self._strip_hostname(path)
         if "b" not in mode:
             mode = mode.replace("t", "") + "b"
 
