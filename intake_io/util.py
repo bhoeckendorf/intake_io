@@ -279,7 +279,7 @@ def to_xarray(
         return xr.DataArray(image, dims=list(axes), coords=coords, name=name, attrs=attrs)
 
     elif isinstance(image, intake.DataSource):
-        return image.to_xarray()
+        return image.to_xarray(partition)
 
     elif isinstance(image, intake.catalog.entry.CatalogEntry):
         return to_xarray(image.get(), spacing, axes, coords, name, attrs, partition)
