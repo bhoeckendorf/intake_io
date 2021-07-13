@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import fsspec
 import numpy as np
+import xarray as xr
 from intake.source.base import DataSource, Schema
 from yaml import dump as _dump
 
@@ -25,16 +26,20 @@ class ImageSource(DataSource):
             self.__file = fsspec.open(self.uri).open()
             return self.__file
 
-    def to_xarray(self, partition=None):
+    def to_xarray(self, partition: Optional[Any] = None):
         self._load_metadata()
         axes = self.metadata.get("axes") or get_axes(self.shape)
+
+        if isinstance(partition, (list, tuple)):
+            img = xr.concat([self.to_xarray(i) for i in partition], axes[0])
+            img.coords[axes[0]] = partition
+            return img
+
         spacing = self.metadata.get("spacing") or {}
         spacing_units = self.metadata.get("spacing_units") or {}
         coords = self.metadata.get("coords") or {}
 
         if partition is not None:
-            if spacing is not None and axes[0] in "tzyx":
-                spacing = spacing[1:]
             axes = axes[1:]
             img = to_xarray(self.read_partition(partition), spacing, axes, coords, spacing_units)
         else:
