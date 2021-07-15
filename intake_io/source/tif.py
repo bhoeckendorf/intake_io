@@ -194,6 +194,6 @@ def save_tif(
             "mode": "composite"
         }
         for field in ("unit", "yunit", "zunit", "tunit"):
-            args["metadata"][field] = args["metadata"][field].encode("latin-1", "backslashreplace").decode("utf-8")
+            args["metadata"][field] = args["metadata"][field].encode("unicode-escape").decode("utf-8")
 
         tifffile.imsave(_uri, img.data, **args)
