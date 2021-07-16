@@ -337,7 +337,7 @@ def _get_spacing_dicts(
             if spacing[ax] in (0.0, 1.0):
                 spacing.pop(ax)
         elif "\\" in units[ax]:
-            units[ax] = units[ax].encode("ascii", "unicode-escape").decode("unicode-escape")
+            units[ax] = units[ax].encode("ascii", "backslashreplace").decode("unicode-escape")
 
     # Fill missing spatial units
     unit = None
