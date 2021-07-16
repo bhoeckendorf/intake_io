@@ -194,6 +194,11 @@ def save_tif(
             "mode": "composite"
         }
         for field in ("unit", "yunit", "zunit", "tunit"):
-            args["metadata"][field] = args["metadata"][field].encode("unicode-escape").decode("utf-8")
+            try:
+                args["metadata"][field].encode("ascii")
+            except UnicodeEncodeError:
+                args["metadata"][field] = args["metadata"][field].encode("unicode-escape").decode("ascii")
+                # TODO: This is ugly.
+                args["metadata"][field] = args["metadata"][field].replace(r"\x", r"\u00")
 
         tifffile.imsave(_uri, img.data, **args)
