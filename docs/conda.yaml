@@ -1,0 +1,13 @@
+name: sphinx
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - myst-nb
+  - myst-parser
+  - sphinx-autoapi
+  - sphinx-autobuild
+  - sphinx_rtd_theme
+  - recommonmark
+  - sphinx-markdown-tables
+  - nbsphinx

@@ -2,7 +2,7 @@ import os
 import re
 import numpy as np
 import pandas as pd
-import intake
+from .base import ImageSource, Schema
 import natsort
 from functools import lru_cache
 from typing import Optional
@@ -22,7 +22,7 @@ class FilePattern:
             include_filters: list = [],
             exclude_filters: list = [],
             ixs: Optional[list] = None,
-            source: intake.DataSource = None
+            source: Optional[ImageSource] = None
             ):
         self.folder = folder
         self.axis_tags = axis_tags
@@ -61,10 +61,11 @@ class FilePattern:
     def coords_inner(self) -> dict:
         try:
             out = self.get_file_metadata()["metadata"]["coords"]
-            if out is None:
-                return {}
         except KeyError:
+            out = None
+        if out is None:
             return {}
+        return out
 
     @property
     def coords_outer(self) -> dict:
@@ -226,78 +227,48 @@ class FilePattern:
         return out.reshape(self.shape)
 
 
-class FilePatternSource(intake.source.base.DataSource):
+class FilePatternSource(ImageSource):
     container = "ndarray"
     name = "filepattern"
     version = "0.0.1"
     partition_access = True
 
     @staticmethod
-    def get(folder, axis_tags, extensions, include_filters=[], exclude_filters=[], metadata=None):
+    def get(folder, axis_tags, extensions, include_filters=[], exclude_filters=[], source: Optional[ImageSource] = None, **kwargs):
         srcs = []
         files = FilePattern(folder, axis_tags, extensions, include_filters, exclude_filters)
         groups = files.get_shape_groups()
         if len(groups) > 1:
             for ixs in groups:
-                src = FilePatternSource(folder, axis_tags, extensions, include_filters, exclude_filters, ixs, copy.deepcopy(metadata))
+                src = FilePatternSource(folder, axis_tags, extensions, include_filters, exclude_filters, ixs, source, **kwargs)
                 srcs.append(src)
         else:
-            src = FilePatternSource(folder, axis_tags, extensions, include_filters, exclude_filters, None, metadata)
+            src = FilePatternSource(folder, axis_tags, extensions, include_filters, exclude_filters, None, source, **kwargs)
             srcs.append(src)
         return srcs
 
-    def __init__(self, folder, axis_tags, extensions, include_filters=[], exclude_filters=[], ixs=None, metadata=None, source: intake.DataSource = None):
-        super().__init__(metadata=metadata)
-        self.uri = folder
+    def __init__(self, folder, axis_tags, extensions, include_filters=[], exclude_filters=[], ixs=None, source: Optional[ImageSource] = None, **kwargs):
+        super().__init__(folder, **kwargs)
         self._files = FilePattern(folder, axis_tags, extensions, include_filters, exclude_filters, ixs, source)
 
-    def _get_schema(self) -> intake.source.base.Schema:
-        schema = intake.source.base.Schema(
-            datashape=self._files.shape,
-            shape=self._files.shape,
+    def _get_schema(self) -> Schema:
+        header = self._files.get_file_metadata()
+        metadata = header["metadata"]
+        shape = self._set_shape_metadata(self._files.axes, self._files.shape, metadata["spacing"], metadata["spacing_units"], self._files.coords)
+        self._set_fileheader(header)
+        return Schema(
             dtype=self._files.dtype,
+            shape=self._files.shape,
             npartitions=self._files.shape[0],
             chunks=None,
-            extra_metadata=self._files.get_file_metadata()["metadata"]
         )
-        schema["extra_metadata"]["axes"] = self._files.axes
-        try:
-            schema["extra_metadata"]["coords"].update(self._files.coords)
-        except (AttributeError, KeyError):
-            schema["extra_metadata"]["coords"] = self._files.coords
-        return schema
 
     def _get_partition(self, i) -> np.ndarray:
-        return self._files.load_partition(i)
+        return self._reorder_axes(self._files.load_partition(i))
 
     def read(self) -> np.ndarray:
         self._load_metadata()
-        return self._files.load()
+        return self._reorder_axes(self._files.load())
 
     def _close(self):
         pass
-
-    def _yaml(self, with_plugin=False) -> str:
-        data = super()._yaml(with_plugin)
-        try:
-            data["sources"]["filepattern"]["metadata"].pop("fileheader")
-        except (TypeError, KeyError):
-            pass
-        try:
-            data["sources"]["filepattern"]["metadata"].pop("axes")
-        except (TypeError, KeyError):
-            pass
-        try:
-            data["sources"]["filepattern"]["metadata"]["coords"].pop("i")
-        except (TypeError, KeyError):
-            pass
-        args = data["sources"]["filepattern"]["args"]
-        args.pop("fpaths")
-        args.pop("metadata")
-        for d in args["axis_tags"]:
-            pattern = args["axis_tags"][d]
-            if isinstance(pattern, re.Pattern):
-                args["axis_tags"][d] = pattern.pattern
-            if args["axis_tags"][d].endswith(r"(\d+)"):
-                args["axis_tags"][d] = args["axis_tags"][d][:-5]
-        return data

@@ -7,17 +7,21 @@ from .fixtures import *
 
 
 def test_round_trip_uncompressed(tmp_path):
-    fpath = os.path.join(tmp_path, "uncompressed.nrrd")
+    fpath = os.path.join(tmp_path, "uncompressed.tif")
     if os.path.exists(fpath):
         os.remove(fpath)
 
     for img0, shape, axes, spacing, units in random_images():
+        if img0.dtype in (np.int8, np.int32, np.int64, np.uint32, np.uint64, np.float64):
+            continue
+        if "i" in axes:
+            continue
         try:
             assert not os.path.exists(fpath)
             intake_io.imsave(img0, fpath, compress=False)
             assert os.path.exists(fpath)
 
-            with intake_io.source.NrrdSource(fpath) as src:
+            with intake_io.source.TifSource(fpath) as src:
                 img1 = intake_io.imload(src)["image"]
 
             assert axes == intake_io.get_axes(img1)
@@ -33,14 +37,18 @@ def test_round_trip_uncompressed(tmp_path):
 
 def test_round_trip_compressed(tmp_path):
     fpaths = {
-        False: os.path.join(tmp_path, "uncompressed.nrrd"),
-        True: os.path.join(tmp_path, "compressed.nrrd")
+        False: os.path.join(tmp_path, "uncompressed.tif"),
+        True: os.path.join(tmp_path, "compressed.tif")
     }
     for fpath in fpaths.values():
         if os.path.exists(fpath):
             os.remove(fpath)
 
     for img0 in ramp_images():
+        if img0.dtype in (np.int8, np.int32, np.int64, np.uint32, np.uint64, np.float64):
+            continue
+        if "i" in intake_io.get_axes(img0):
+            continue
         try:
             for compress, fpath in fpaths.items():
                 if os.path.exists(fpath):
@@ -50,7 +58,7 @@ def test_round_trip_compressed(tmp_path):
                 intake_io.imsave(img0, fpath, compress=compress)
                 assert os.path.exists(fpath)
 
-                with intake_io.source.NrrdSource(fpath) as src:
+                with intake_io.source.TifSource(fpath) as src:
                     img1 = intake_io.imload(src)["image"]
                 img2 = intake_io.imload(fpath)["image"]
                 
@@ -67,12 +75,14 @@ def test_round_trip_compressed(tmp_path):
 
 
 def test_load_from_url():
-    url = "http://teem.sourceforge.net/nrrd/files/fool.nrrd"
-    # img = intake_io.imload(url)
-    # assert img["image"].shape == (128, 128)
-    # assert img["image"].dtype == np.uint8
-    # assert intake_io.get_axes(img) == "yx"
-    img = intake_io.imload(url, metadata_only=True)
-    assert img["shape"] == (128, 128)
-    assert img["dtype"] == np.uint8
-    assert img["metadata"]["original_axes"] == "yx"
+    url = "https://downloads.openmicroscopy.org/images/OME-TIFF/2016-06/bioformats-artificial/multi-channel.ome.tif"
+    img = intake_io.imload(url)
+    assert img["image"].shape == (3, 167, 439)
+    assert img["image"].dtype == np.int8
+    assert intake_io.get_axes(img) == "cyx"
+
+    url = "https://downloads.openmicroscopy.org/images/OME-TIFF/2016-06/bioformats-artificial/multi-channel-4D-series.ome.tif"
+    img = intake_io.imload(url)
+    assert img["image"].shape == (7, 3, 5, 167, 439)
+    assert img["image"].dtype == np.int8
+    assert intake_io.get_axes(img) == "tczyx"
