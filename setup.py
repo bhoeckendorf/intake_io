@@ -22,6 +22,7 @@ setup(
         "pandas",
         "pydicom",
         "pyklb",
+        "pytest",
         "pynrrd",
         "xarray",
         "xmltodict",
