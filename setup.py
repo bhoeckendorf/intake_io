@@ -24,7 +24,8 @@ setup(
         "pyklb",
         "pynrrd",
         "xarray",
-        "xmltodict"
+        "xmltodict",
+        "zarr"
       ],
     entry_points={
         "intakedrivers": [
