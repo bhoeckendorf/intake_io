@@ -1,4 +1,5 @@
 from fsspec import AbstractFileSystem
+from fsspec.callbacks import _DEFAULT_CALLBACK
 import io
 import natsort
 import flywheel
@@ -9,7 +10,7 @@ class FlywheelFileSystem(AbstractFileSystem):
     _cached = False
     protocol = "flywheel"
     async_impl = False
-    root_marker = ""
+    root_marker = "/"
 
     def __init__(self, hostname, apikey, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -32,22 +33,30 @@ class FlywheelFileSystem(AbstractFileSystem):
         raise NotImplementedError
 
     def ls(self, path, detail=False, **kwargs):
-        path = self._strip_hostname(path).rstrip(self.sep)
-        parent, file = path.rsplit(self.sep, 1)
-        if file in ("analyses", "files"):
-            # List analyses and files if path ends on "/analyses" or "/files"
-            node = self._client.lookup(parent)
-            items = getattr(node, file)
+        path = self._strip_hostname(path).rstrip(self.sep).lstrip(self.root_marker)
+        if len(path.strip()) == 0:
+            node = None
+            items = [i.id for i in self._client.groups()]
         else:
-            node = self._client.lookup(path)
-            items = getattr(node, node.child_types[0])
             try:
-                items = items()
-            except TypeError:
-                pass
+                parent, file = path.rsplit(self.sep, 1)
+            except ValueError:
+                parent = path
+                file = None
+            if file in ("analyses", "files"):
+                # List analyses and files if path ends on "/analyses" or "/files"
+                node = self._client.lookup(parent)
+                items = getattr(node, file)
+            else:
+                node = self._client.lookup(path)
+                items = getattr(node, node.child_types[0])
+                try:
+                    items = items()
+                except TypeError:
+                    pass
         
         # List analysis files only on ".../analyses/name/files"
-        if isinstance(node, flywheel.models.resolver_analysis_node.ResolverAnalysisNode) and not file == "files":
+        if node is not None and self._type(node) == "analysis" and not file == "files":
             items = list(filter(lambda x: not self.isfile(x), items))
 
         try:
@@ -63,7 +72,7 @@ class FlywheelFileSystem(AbstractFileSystem):
             except AttributeError:
                 continue
 
-        paths = [path + self.sep + i for i in map(self._ls_name, items)]
+        paths = [self.root_marker + path + self.sep + i for i in map(self._ls_name, items)]
         if not detail:
             return paths
         else:
@@ -88,13 +97,16 @@ class FlywheelFileSystem(AbstractFileSystem):
         dirs = {}
         files = {}
 
-        detail = kwargs.pop("detail") or False
+        try:
+            detail = kwargs.pop("detail") or False
+        except KeyError:
+            detail = False
+
         for item in self.ls(path, detail=True, **kwargs):
-            itemname = self._ls_name(item)
-            pathname = f"{path}{self.sep}{itemname}".rstrip("/")
-            if self.isdir(item) and pathname != path:
-                leaf = itemname.rsplit("/", 1)[-1]
-                if leaf in ("analyses", "files"):
+            pathname = item["name"]
+            itemname = pathname.rstrip(self.sep).rsplit(self.sep, 1)[-1]
+            if not self.isfile(item) and pathname != path:
+                if itemname in ("analyses", "files"):
                     item = {}
                 full_dirs[pathname] = item
                 dirs[itemname] = item
@@ -159,7 +171,7 @@ class FlywheelFileSystem(AbstractFileSystem):
             path = self._strip_hostname(path).rstrip(self.sep).split(self.sep)
             if path[-1] in ("analyses", "files"):
                 return "directory"
-            if path[-2] == "analyses":
+            if len(path) > 1 and path[-2] == "analyses":
                 return "analysis"
             if len(path) == 1:
                 return "group"
@@ -173,18 +185,11 @@ class FlywheelFileSystem(AbstractFileSystem):
                 return "acquisition"
             else:
                 raise ValueError(f'Unknown type at path "{self.sep.join(path)}"')
-        elif isinstance(path, (flywheel.models.group.Group, flywheel.models.resolver_group_node.ResolverGroupNode, flywheel.models.container_group_output.ContainerGroupOutput)):
-            return "group"
-        elif isinstance(path, (flywheel.models.project.Project, flywheel.models.resolver_project_node.ResolverProjectNode, flywheel.models.container_project_output.ContainerProjectOutput)):
-            return "project"
-        elif isinstance(path, (flywheel.models.subject.Subject, flywheel.models.resolver_subject_node.ResolverSubjectNode, flywheel.models.container_subject_output.ContainerSubjectOutput)):
-            return "subject"
-        elif isinstance(path, (flywheel.models.session.Session, flywheel.models.resolver_session_node.ResolverSessionNode, flywheel.models.container_session_output.ContainerSessionOutput)):
-            return "session"
-        elif isinstance(path, (flywheel.models.acquisition.Acquisition, flywheel.models.resolver_acquisition_node.ResolverAcquisitionNode, flywheel.models.container_acquisition_output.ContainerAcquisitionOutput)):
-            return "acquisition"
-        elif isinstance(path, (flywheel.models.resolver_analysis_node.ResolverAnalysisNode, flywheel.models.analysis_output.AnalysisOutput)):
-            return "analysis"
+        else:
+            kind = str(type(path)).lower()
+            for i in ("group", "project", "subject", "session", "acquisition", "analysis"):
+                if i in kind:
+                    return i
 
         raise ValueError(f'Unknown type "{type(path)}".')
 
@@ -200,7 +205,7 @@ class FlywheelFileSystem(AbstractFileSystem):
 
     def isfile(self, path):
         if not isinstance(path, str):
-            return isinstance(path, (flywheel.models.file_entry.FileEntry, flywheel.models.resolver_file_node.ResolverFileNode, flywheel.models.container_file_output.ContainerFileOutput))
+            return "file" in str(type(path)).lower()
         try:
             return path.rstrip(self.sep).rsplit(self.sep, 2)[-2] == "files"
         except IndexError:
@@ -213,7 +218,15 @@ class FlywheelFileSystem(AbstractFileSystem):
         raise NotImplementedError
 
     def get_file(self, rpath, lpath, **kwargs):
-        raise NotImplementedError
+        _rpath, fname = rpath.rsplit(self.sep, 1)
+        info = self.info(_rpath)
+        while "files" not in info["data"]:
+            _rpath = rpath.rsplit(self.sep, 1)[0]
+            info = self.info(_rpath)
+        info["data"].download_file(fname, lpath)
+
+    def get(self, rpath, lpath, recursive=False, callback=_DEFAULT_CALLBACK, **kwargs):
+        self.get_file(rpath, lpath, **kwargs)
 
     def put_file(self, lpath, rpath, **kwargs):
         raise NotImplementedError
