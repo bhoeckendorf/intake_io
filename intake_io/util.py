@@ -423,14 +423,16 @@ def partition_gen(
     outer_axes = "".join(i for i in axes if i not in inner_axes)
 
     uri_base, uri_ext = os.path.splitext(uri)
+    if uri_base.lower().endswith(".ome") or uri_ext.lower() == ".gz":
+        uri_base, _uri_ext = os.path.splitext(uri_base)
+        uri_ext = _uri_ext + uri_ext
     int_paddings = [j for j in outer_axes if np.all([np.issubdtype(i.dtype, np.integer) for i in image.coords[j].data])]
     int_paddings = {i: len(str(np.max(image.coords[i].data))) for i in int_paddings}
 
     if isinstance(image, xr.Dataset) and not multikey:
         for key, img in image.items():
             if len(image.keys()) > 1:
-                _uri = os.path.splitext(uri)
-                _uri = f"{_uri[0]}{sep_outer}var{sep_inner}{key}{_uri[1]}"
+                _uri = f"{uri_base}{sep_outer}var{sep_inner}{key}{uri_ext}"
             else:
                 _uri = uri
             yield from partition_gen(img, inner_axes, _uri, multikey, sep_outer, sep_inner)
