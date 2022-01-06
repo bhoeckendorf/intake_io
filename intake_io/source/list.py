@@ -7,6 +7,8 @@ from .base import ImageSource, Schema
 from ..autodetect import autodetect
 from ..util import get_axes
 
+from concurrent.futures import ThreadPoolExecutor
+
 
 class ListSource(ImageSource):
     """Intake source for a list of URIs and intake sources.
@@ -21,7 +23,7 @@ class ListSource(ImageSource):
     version = "0.0.1"
     partition_access = True
 
-    def __init__(self, items: list, axis: Optional[str] = None, as_float32=False, **kwargs):
+    def __init__(self, items: list, axis: Optional[str] = None, as_float32=False, num_workers=6, **kwargs):
         """
         Arguments:
             items (list): items
@@ -33,6 +35,7 @@ class ListSource(ImageSource):
         self.items = items
         self.axis = axis
         self.as_float32 = as_float32
+        self.num_workers = num_workers
         self.uri = None
 
     def _get_schema(self) -> Schema:
@@ -47,42 +50,23 @@ class ListSource(ImageSource):
                 metadata = src.discover()
             self.uri = self.items[0]
 
-        schema = Schema(
-            shape=metadata["shape"],
-            dtype=metadata["dtype"],
+        shape = self._set_shape_metadata(
+            self.axis + metadata["metadata"]["original_axes"],
+            tuple([len(self.items), *metadata["metadata"]["original_shape"]]),
+            metadata["metadata"]["spacing"], metadata["metadata"]["spacing_units"])
+        self._set_fileheader(metadata["metadata"]["fileheader"])
+        return Schema(
+            dtype=np.float32 if self.as_float32 else np.dtype(metadata["dtype"]),
+            shape=shape,
             npartitions=len(self.items),
-            chunks=None,
-            extra_metadata=metadata["metadata"]
+            chunks=None
         )
-        schema["extra_metadata"].update(self.metadata)
-
-        if schema["npartitions"] > 1:
-            schema["shape"] = (schema["npartitions"], *schema["shape"])
-            schema["datashape"] = schema["shape"]
-            try:
-                schema["extra_metadata"]["spacing"] = (
-                float(schema["extra_metadata"]["fileheader"]["SliceThickness"]), *schema["extra_metadata"]["spacing"])
-            except Exception:
-                try:
-                    schema["extra_metadata"]["spacing"] = (
-                    float(schema["extra_metadata"]["fileheader"]["OME"]["Image"]["Pixels"]["@PhysicalSizeZ"]),
-                    *schema["extra_metadata"]["spacing"])
-                except Exception:
-                    pass
-        axes = schema["extra_metadata"]["axes"]
-        if axes is None:
-            axes = get_axes(metadata["shape"])
-        axes = "itczyx"[-len(schema["shape"]):-len(axes)] + axes
-        schema["extra_metadata"]["axes"] = axes
-        if self.as_float32:
-            schema["datatype"] = np.float32
-        return schema
 
     def _get_partition(self, i: int) -> np.ndarray:
         if isinstance(self.items[i], ImageSource):
             out = self.items[i].read()
         else:
-            with autodetect(self.items[i]) as src:
+            with autodetect(self.items[i], output_axis_order=self.metadata["original_axes"][1:]) as src:
                 out = src.read()
         if self.as_float32 and out.dtype != np.float32:
             return out.astype(np.float32)
@@ -92,14 +76,16 @@ class ListSource(ImageSource):
         self._load_metadata()
         if isinstance(i, str):
             i = self.metadata["coords"][self.metadata["axes"][0]].index(i)
-        return self._get_partition(i)
+        return self._reorder_axes(self._get_partition(i))
 
     def read(self) -> np.ndarray:
         self._load_metadata()
-        out = np.zeros(self.shape, np.float32 if self.as_float32 else self.as_type)
-        for i in range(out.shape[0]):
-            out[i] = self.read_partition(i)
-        return out
+        out = np.zeros(self.metadata["original_shape"], np.float32 if self.as_float32 else self.dtype)
+        def _task(i):
+            out[i] = self._get_partition(i)
+        with ThreadPoolExecutor(self.num_workers) as executor:
+            executor.map(_task, range(len(self.items)))
+        return self._reorder_axes(out)
 
     def sort_items(self):
         if self.items is None:
