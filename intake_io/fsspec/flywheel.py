@@ -1,8 +1,11 @@
+import io
+import os
+
+import flywheel
+import natsort
 from fsspec import AbstractFileSystem
 from fsspec.callbacks import _DEFAULT_CALLBACK
-import io
-import natsort
-import flywheel
+
 
 class FlywheelFileSystem(AbstractFileSystem):
 
@@ -12,9 +15,11 @@ class FlywheelFileSystem(AbstractFileSystem):
     async_impl = False
     root_marker = "/"
 
-    def __init__(self, hostname, apikey, *args, **kwargs):
+    def __init__(self, hostname=None, apikey=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._hostname = hostname
+        self._hostname = os.environ["FLYWHEEL_HOSTNAME"] if hostname is None else hostname
+        if apikey is None:
+            apikey = os.environ["FLYWHEEL_APIKEY"]
         self._client = flywheel.Client(f"{self._hostname}:{apikey.split(':')[-1]}")
 
     def _strip_hostname(self, x):
