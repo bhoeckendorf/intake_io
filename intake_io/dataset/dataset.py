@@ -3,19 +3,37 @@ from typing import Any, Tuple, Dict, Union
 
 import intake
 import numpy as np
-import pandas as pd
 from intake.catalog import Catalog
+from torch.utils.data import Dataset as _Dataset
 
 from .util import *
 from .. import io
 
 
-class IntakeDataset:
+class Dataset(_Dataset):
 
-    def __init__(self, catalog: Union[str, Catalog], loader=None):
-        self._loader = loader
-        if self._loader is None:
-            self._loader = lambda src, partition: dict(data=io.imload(src, partition=partition))
+    def __init__(self):
+        self.transform = None
+
+    def __iter__(self):
+        for ix in range(len(self)):
+            yield self[ix]
+
+    def __getitem__(self, i: int) -> Dict[str, Any]:
+        out = {"sample_index": i}
+        out.update(self._load_index(i))
+        if self.transform is not None:
+            return self.transform(out)
+        return out
+
+    def _load_index(self, i: int):
+        raise NotImplementedError
+
+
+class IntakeDataset(Dataset):
+
+    def __init__(self, catalog: Union[str, Catalog]):
+        super().__init__()
         self._items = []
         self._num_partitions = []
         self._cumsum_partitions = []
@@ -32,20 +50,16 @@ class IntakeDataset:
     def __len__(self):
         return self._cumsum_partitions[-1]
 
-    def __iter__(self):
-        for ix in range(len(self)):
-            yield self[ix]
-
-    def __getitem__(self, i: int) -> Dict[str, Any]:
-        item_ix, partition_ix = self._get_item_partition_ixs(i)
-        if self._num_partitions[item_ix] > 1:
-            return {**dict(sample_index=i), **self._loader(self._items[item_ix], partition_ix)}
-        else:
-            return {**dict(sample_index=i), **self._loader(self._items[item_ix], None)}
-
     def close(self):
         for item in self._items:
             item.close()
+
+    def _load_index(self, i: int):
+        item_ix, partition_ix = self._get_item_partition_ixs(i)
+        return self._load_data(self._items[item_ix], partition_ix)
+
+    def _load_data(self, src, partition):
+        return {"data": io.imload(src, partition=partition)}
 
     def _parse_catalog(self, catalog: Catalog):
         self._items.extend(getattr(catalog, i) for i in list(catalog))
@@ -68,6 +82,8 @@ class IntakeDataset:
             raise IndexError("Index out of range.")
         item_ix = int(np.argwhere(self._cumsum_partitions > i)[0])
         partition_ix = i - (self._cumsum_partitions[item_ix - 1] if item_ix > 0 else 0)
+        if self._num_partitions[item_ix] == 1:
+            partition_ix = None
         return item_ix, partition_ix
 
     def get_dtype(self, i: int) -> np.dtype:

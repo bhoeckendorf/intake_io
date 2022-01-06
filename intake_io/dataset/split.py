@@ -5,12 +5,14 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import ShuffleSplit
 
+from .dataset import Dataset
 from .util import get_categories
 
 
-class SubsetDataset:
+class SubsetDataset(Dataset):
 
     def __init__(self, data: Any, ixs: Tuple[int, ...]):
+        super().__init__()
         self._data = data
         self._ixs = ixs
 
@@ -22,11 +24,7 @@ class SubsetDataset:
     def __len__(self):
         return len(self._ixs)
 
-    def __iter__(self):
-        for ix in range(len(self)):
-            yield self[ix]
-
-    def __getitem__(self, i: int) -> Dict[str, Any]:
+    def _load_index(self, i: int) -> Dict[str, Any]:
         return self._data[self._ixs[i]]
 
     @cached_property
