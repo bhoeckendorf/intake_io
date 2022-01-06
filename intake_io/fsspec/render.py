@@ -86,7 +86,7 @@ class RenderFileSystem(AbstractFileSystem):
         cache_options=None,
         **kwargs,
     ):
-        # e.g. render://bioimg-wkst06.stjude.sjcrh.local/owner/project/stack/c0_z1002_y3389_x10193_h2048_w2048_s1.tif
+        # e.g. render://host/owner/project/stack/[c0_]z1002_y3389_x10193_h2048_w2048_s1.tif
         host, owner, project, stack, file = self._strip_protocol(path).split(self.sep)
         try:
             c, z, y, x, h, w, s, f = re.match(r"c(.*)_z(\d+)_y(\d+)_x(\d+)_h(\d+)_w(\d+)_s(.*)\.(.*)", file).groups()
