@@ -90,6 +90,10 @@ def get_axes(x: Any) -> str:
     raise NotImplementedError(f"intake_io.get_axes({type(x)})")
 
 
+def get_spatial_axes(x: Any):
+    return "".join(filter(lambda x: x in "zyx", get_axes(x)))
+
+
 def get_spacing(
         image: Union[xr.Dataset, xr.DataArray],
         axes: Optional[str] = None

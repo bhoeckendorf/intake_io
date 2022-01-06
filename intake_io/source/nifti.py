@@ -1,5 +1,6 @@
 import os
 import re
+from copy import deepcopy
 from functools import cached_property
 from gzip import GzipFile
 from typing import Any, Optional
@@ -8,7 +9,7 @@ import nibabel as nib
 import numpy as np
 
 from .base import ImageSource, Schema
-from ..util import get_axes, get_spacing, get_spacing_units, partition_gen
+from ..util import get_axes, get_spatial_axes, get_spacing, get_spacing_units, partition_gen
 
 
 class NiftiSource(ImageSource):
@@ -70,8 +71,8 @@ class NiftiSource(ImageSource):
                 spacing_units[ax] = header.get_xyzt_units()[1]
 
         # clean file header
-        header = dict(header)
-        for k, v in header.items():
+        _header = dict(deepcopy(header))
+        for k, v in _header.items():
             if isinstance(v, np.ndarray):
                 if v.dtype.kind == "S":
                     v = str(v)
@@ -81,15 +82,16 @@ class NiftiSource(ImageSource):
                         pass
                     if v == "b''":
                         v = ""
-                    header[k] = v
+                    _header[k] = v
                 elif v.size == 1:
                     if v.dtype.kind in ("i", "u"):
-                        header[k] = int(v)
+                        _header[k] = int(v)
                     elif v.dtype.kind == "f":
-                        header[k] = float(v)
+                        _header[k] = float(v)
+        _header["_obj"] = header
 
         shape = self._set_shape_metadata(axes, shape, spacing, spacing_units)
-        self._set_fileheader(header)
+        self._set_fileheader(_header)
         return Schema(
             dtype=dtype,
             shape=shape,
@@ -120,24 +122,31 @@ def save_nifti(
         partition: Optional[str] = None,
 
         # Format-specific kwargs
-        nifti_version: int = 2
+        nifti_version: int = 2,
+        header: Optional[Any] = None
 ):
     if partition is None:
         partition = "xyz"
 
     for img, _uri in partition_gen(image, partition, uri):
-        if nifti_version == 1:
-            header = nib.Nifti1Header()
+        if header is None:
+            if nifti_version == 1:
+                header = nib.Nifti1Header()
+            else:
+                header = nib.Nifti2Header()
+
+            header.set_data_shape(img.shape[::-1])
+            header.set_data_dtype(img.dtype)
+            header.set_xyzt_units(xyz=get_spacing_units(image, "x") or None, t=get_spacing_units(image, "t") or None)
+
+            affine = np.diag((
+                *[get_spacing(img, ax) or 1.0 for ax in get_spatial_axes(img)],
+                1.0
+            ))
+
         else:
-            header = nib.Nifti2Header()
-
-        header.set_data_shape(img.shape[::-1])
-        header.set_data_dtype(img.dtype)
-        header.set_xyzt_units(xyz=get_spacing_units(image, "x") or None, t=get_spacing_units(image, "t") or None)
-
-        affine = np.eye(img.ndim + 1, img.ndim + 1)
-        for i, ax in enumerate(get_axes(img)):
-            affine[i, i] = get_spacing(img, ax) or 1.0
+            affine = None
+            nifti_version = 1 if int(header["sizeof_hdr"]) == 348 else 2
 
         if nifti_version == 1:
             ni = nib.Nifti1Image(
