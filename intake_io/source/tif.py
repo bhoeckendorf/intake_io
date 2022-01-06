@@ -66,6 +66,7 @@ class TifSource(ImageSource):
 
         series = self._file.series[0]
         axes = series.axes.lower()
+        axes = axes.replace("q", "c").replace("s", "c")
         shape = dict(zip(axes, series.shape))
         spacing = {}
         spacing_units = {}
