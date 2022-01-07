@@ -29,7 +29,7 @@ setup(
         "xmltodict",
         "zarr"
       ],
-    exras_require={
+    extras_require={
         "all": [
             "flywheel-sdk",
             "git+https://github.com/bhoeckendorf/pyklb.git@skbuild"
