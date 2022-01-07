@@ -11,9 +11,9 @@ setup(
     license="MIT",
     packages=find_packages(exclude=("tests*", "docs*")),
     install_requires=[
+        "aiohttp",
         "bioformats",
         "dask",
-        "flywheel-sdk",
         "imageio",
         "intake",
         "natsort",
@@ -21,13 +21,21 @@ setup(
         "numpy",
         "pandas",
         "pydicom",
-        "pyklb",
         "pytest",
         "pynrrd",
+        "requests",
+        "tifffile",
         "xarray",
         "xmltodict",
         "zarr"
       ],
+    exras_require={
+        "all": [
+            "flywheel-sdk",
+            "git+https://github.com/bhoeckendorf/pyklb.git@skbuild"
+        ]
+    },
+    tests_require=["pytest"],
     entry_points={
         "intakedrivers": [
             "auto = intake_io.source.AutoSource",

@@ -36,6 +36,11 @@ def autodetect(uri: str, **kwargs) -> intake.source.DataSource:
     elif luri.endswith(".dicom.zip") or luri.endswith(".dcm.zip"):
         return source.DicomZipSource(uri, **kwargs)
     elif lext == ".klb":
+        # Check if pyklb is installed. If not, explicitly import to trigger error message.
+        try:
+            source.KlbSource
+        except AttributeError:
+            from .source.klb import KlbSource
         return source.KlbSource(uri, **kwargs)
     elif luri.endswith(".ome.tif") or luri.endswith(".ome.tiff") \
             or lext not in (".tif", ".tiff", ".png", ".jpg", ".gif", ".mp4"):

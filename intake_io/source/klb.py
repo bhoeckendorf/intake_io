@@ -1,7 +1,14 @@
+try:
+    import pyklb as klb
+except ModuleNotFoundError:
+    raise ModuleNotFoundError(
+        "KLB format unsupported because optional dependency pyklb is not installed."
+        'To use KLB format, install pyklb using "pip install git+https://github.com/bhoeckendorf/pyklb.git@skbuild"'
+    )
+
 from typing import Any, Optional, Tuple
 
 import numpy as np
-import pyklb as klb
 
 from .base import ImageSource, Schema
 from ..util import get_axes, get_spacing, partition_gen, to_numpy

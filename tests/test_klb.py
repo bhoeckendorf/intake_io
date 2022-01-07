@@ -1,11 +1,11 @@
 import os
-import numpy as np
-import xarray as xr
-import pytest
+from importlib.util import find_spec
+
 import intake_io
 from .fixtures import *
 
 
+@pytest.mark.skipif(find_spec("pyklb") is None, reason='Optional dependency "pyklb" is not installed')
 def test_round_trip_uncompressed(tmp_path):
     fpath = os.path.join(tmp_path, "uncompressed.klb")
     if os.path.exists(fpath):
@@ -34,6 +34,7 @@ def test_round_trip_uncompressed(tmp_path):
                 os.remove(fpath)
 
 
+@pytest.mark.skipif(find_spec("pyklb") is None, reason='Optional dependency "pyklb" is not installed')
 def test_round_trip_compressed(tmp_path):
     fpaths = {
         False: os.path.join(tmp_path, "uncompressed.klb"),

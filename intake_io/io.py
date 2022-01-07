@@ -6,7 +6,6 @@ import xarray as xr
 import zarr
 
 from .autodetect import autodetect as _autodetect
-from .source.klb import save_klb as _save_klb
 from .source.nifti import save_nifti as _save_nifti
 from .source.nrrd import save_nrrd as _save_nrrd
 from .source.tif import save_tif as _save_tif
@@ -131,6 +130,7 @@ def imsave(image: Any, uri: str, compress: Optional[bool] = None, partition: Opt
     elif luri.endswith(".nii.gz") or luri.endswith(".nii"):
         _save_nifti(image, uri, partition=partition, **kwargs)
     elif ext == ".klb":
+        from .source.klb import save_klb as _save_klb
         _save_klb(image, uri, partition=partition, **kwargs)
     else:
         raise NotImplementedError(f"intake_io.imsave(...) with file extension '{ext}'")
