@@ -32,7 +32,7 @@ setup(
     extras_require={
         "all": [
             "flywheel-sdk",
-            "git+https://github.com/bhoeckendorf/pyklb.git@skbuild"
+            "pyklb @ git+https://github.com/bhoeckendorf/pyklb.git@skbuild"
         ]
     },
     tests_require=["pytest"],
