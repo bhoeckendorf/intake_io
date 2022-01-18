@@ -4,10 +4,10 @@ from .serialization import serialize as _serialize, deserialize as _deserialize
 
 class CachedDataset:
 
-    def __init__(self, data, cache_dir):
+    def __init__(self, data, cache_dir, map_size=1024**3, **kwargs):
         self.data = data
         self.cache_dir = cache_dir
-        self._cache = lmdb.open(self.cache_dir)
+        self._cache = lmdb.open(path=self.cache_dir, map_size=map_size, **kwargs)
         self.transform = None
 
     def __getattr__(self, x):

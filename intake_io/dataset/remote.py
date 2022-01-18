@@ -39,8 +39,8 @@ class RemoteDataset(CachedDataset):
     # Possibly intercept and store item before deserialization, or perhaps utilize the separate serializations by
     # optimizing separate serialization parameters for transport and caching.
 
-    def __init__(self, hostname, port, key, cache_dir):
-        super().__init__(_RemoteDataset(hostname, port, key), cache_dir)
+    def __init__(self, hostname, port, key, cache_dir, map_size=1024**3, **kwargs):
+        super().__init__(_RemoteDataset(hostname, port, key), cache_dir, map_size=map_size, **kwargs)
 
 
 class DatasetServer:
