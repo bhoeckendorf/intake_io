@@ -2,7 +2,7 @@
 
 Image-focused IO for [Python](https://www.python.org) using [intake](https://intake.readthedocs.io/en/latest/) to wrap data loading backends and [xarray](http://xarray.pydata.org/en/stable/) as target.
 
-[![Documentation Status](https://readthedocs.org/projects/intake-io/badge/?version=latest)](https://intake-io.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/intake-io/badge/?version=latest)](https://intake-io.readthedocs.io/en/latest/?badge=latest) [![DOI](https://zenodo.org/badge/312639381.svg)](https://zenodo.org/badge/latestdoi/312639381)
 
 ## Why intake?
 
@@ -19,8 +19,7 @@ Image-focused IO for [Python](https://www.python.org) using [intake](https://int
 
 ## Data sources
 
-A number of [data sources](https://intake-io.readthedocs.io/en/latest/datasources.html) are supported, with new ones 
-being added at a slow pace. 
+A number of [data sources](https://intake-io.readthedocs.io/en/latest/datasources.html) are supported, with new ones being added at a slow pace.
 
 ## Installation
 
