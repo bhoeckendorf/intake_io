@@ -4,13 +4,12 @@ from typing import Any, Tuple, Dict, Union
 import intake
 import numpy as np
 from intake.catalog import Catalog
-from torch.utils.data import Dataset as _Dataset
 
 from .util import *
 from .. import io
 
 
-class Dataset(_Dataset):
+class Dataset:
 
     def __init__(self):
         self.transform = None

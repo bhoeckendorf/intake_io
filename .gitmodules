@@ -1,0 +1,3 @@
+[submodule "intake_io/dataset/serialization"]
+	path = intake_io/dataset/serialization
+	url = https://github.com/bhoeckendorf/serialization.git

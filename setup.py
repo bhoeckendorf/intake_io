@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="intake_io",
-    version="0.0.2",
+    version="0.0.3",
     description="",
     long_description="",
     author="Burkhard Hoeckendorf",
@@ -20,6 +20,7 @@ setup(
         "nibabel",
         "numpy",
         "pandas",
+        "pims",
         "pydicom",
         "pytest",
         "pynrrd",
@@ -31,8 +32,12 @@ setup(
       ],
     extras_require={
         "all": [
+            "blosc",
+            "cloudpickle",
             "flywheel-sdk",
-            "pyklb @ git+https://github.com/bhoeckendorf/pyklb.git@skbuild"
+            "lmdb",
+            "pyklb @ git+https://github.com/bhoeckendorf/pyklb.git@skbuild",
+            "pyzmq"
         ]
     },
     tests_require=["pytest"],

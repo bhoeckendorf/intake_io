@@ -1,25 +1,50 @@
-from typing import Any, Dict
+import lmdb
+from .serialization import serialize as _serialize, deserialize as _deserialize
 
 
 class CachedDataset:
 
-    def __init__(self, data: Any):
-        self._data = data
-        self._cache = {}
+    def __init__(self, data, cache_dir):
+        self.data = data
+        self.cache_dir = cache_dir
+        self._cache = lmdb.open(self.cache_dir)
+        self.transform = None
 
-    def __getattr__(self, item):
-        if item == "__getitem__":
-            return getattr(self, item)
-        return getattr(self._data, item)
+    def __getattr__(self, x):
+        try:
+            return self.__getattribute__(x)
+        except AttributeError:
+            return self.data.__getattr__(x)
 
-    def __len__(self):
-        return len(self._data)
+    def __getitem__(self, x):
+        k = str(x).encode()
+
+        with self._cache.begin(buffers=True) as txn:
+            y = txn.get(k, None)
+
+        if y is None:
+            y = self.data[x]
+            with self._cache.begin(buffers=True, write=True) as txn:
+                txn.put(k, self.serialize(y))
+        else:
+            y = self.deserialize(y)
+
+        if self.transform is not None:
+            y = self.transform(y)
+        return y
 
     def __iter__(self):
-        for ix in range(len(self)):
-            yield self[ix]
+        for i in range(len(self)):
+            yield self[i]
 
-    def __getitem__(self, i: int) -> Dict[str, Any]:
-        if i not in self._cache:
-            self._cache[i] = self._data[i]
-        return self._cache[i]
+    def __len__(self):
+        return len(self.data)
+
+    def close(self):
+        self._cache.close()
+
+    def serialize(self, x):
+        return _serialize(x, None)
+
+    def deserialize(self, x):
+        return _deserialize(x, None)
