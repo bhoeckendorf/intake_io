@@ -1,3 +1,4 @@
+from copy import deepcopy
 import lmdb
 from .serialization import serialize as _serialize, deserialize as _deserialize
 
@@ -7,8 +8,31 @@ class CachedDataset:
     def __init__(self, data, cache_dir, map_size_gb=1, **kwargs):
         self.data = data
         self.cache_dir = cache_dir
-        self._cache = lmdb.open(path=self.cache_dir, map_size=map_size_gb * 1024**3, **kwargs)
+        self.map_size_gb = map_size_gb
+        self._kwargs = kwargs
         self.transform = None
+        self._setup()
+
+    def _setup(self):
+        self._cache = lmdb.open(path=self.cache_dir, map_size=self.map_size_gb * 1024**3, **self._kwargs)
+
+    def __copy__(self):
+        out = CachedDataset(deepcopy(self.data), self.cache_dir, self.map_size_gb, **self._kwargs)
+        out.transform = deepcopy(self.transform)
+        return out
+
+    def __deepcopy__(self, *args):
+        return self.__copy__()
+
+    def __getstate__(self):
+        return {k: getattr(self, k) for k in (
+            "data", "cache_dir", "map_size_gb", "_kwargs", "transform"
+        )}
+
+    def __setstate__(self, state):
+        for k, v in state.items():
+            setattr(self, k, v)
+        self._setup()
 
     def __getattr__(self, x):
         try:
@@ -33,9 +57,9 @@ class CachedDataset:
             y = self.transform(y)
         return y
 
-    def __iter__(self):
-        for i in range(len(self)):
-            yield self[i]
+    # def __iter__(self):
+    #     for i in range(len(self)):
+    #         yield self[i]
 
     def __len__(self):
         return len(self.data)

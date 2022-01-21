@@ -14,9 +14,9 @@ class Dataset:
     def __init__(self):
         self.transform = None
 
-    def __iter__(self):
-        for ix in range(len(self)):
-            yield self[ix]
+    # def __iter__(self):
+    #     for ix in range(len(self)):
+    #         yield self[ix]
 
     def __getitem__(self, i: int) -> Dict[str, Any]:
         out = {"sample_index": i}

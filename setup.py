@@ -33,7 +33,6 @@ setup(
     extras_require={
         "all": [
             "blosc",
-            "cloudpickle",
             "flywheel-sdk",
             "lmdb",
             "pyklb @ git+https://github.com/bhoeckendorf/pyklb.git@skbuild",
