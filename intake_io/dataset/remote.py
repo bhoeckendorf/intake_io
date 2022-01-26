@@ -10,12 +10,12 @@ from .serialization import deserialize as _deserialize, serialize as _serialize
 
 class _RemoteDataset:
 
-    def __init__(self, hostname, port, key, data_name):
+    def __init__(self, hostname, port, key, data_name, transform=None):
         self.hostname = hostname
         self.port = port
         self._key = key.encode()
         self.data_name = data_name
-        self.transform = None
+        self.transform = transform
         self._len = None
         self._socket = None
         self._worker_ids = set()
@@ -26,9 +26,7 @@ class _RemoteDataset:
         self._socket.connect(f"tcp://{self.hostname}:{self.port}")
 
     def __copy__(self):
-        out = _RemoteDataset(self.hostname, self.port, self._key.decode("utf8"), self.data_name)
-        out.transform = deepcopy(self.transform)
-        return out
+        return _RemoteDataset(self.hostname, self.port, self._key.decode("utf8"), self.data_name, deepcopy(self.transform))
 
     def __deepcopy__(self, *args):
         return self.__copy__()

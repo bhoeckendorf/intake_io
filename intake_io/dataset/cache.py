@@ -5,21 +5,19 @@ from .serialization import serialize as _serialize, deserialize as _deserialize
 
 class CachedDataset:
 
-    def __init__(self, data, cache_dir, map_size_gb=1, **kwargs):
+    def __init__(self, data, cache_dir, map_size_gb=1, transform=None, **kwargs):
         self.data = data
         self.cache_dir = cache_dir
         self.map_size_gb = map_size_gb
-        self._kwargs = kwargs
-        self.transform = None
+        self._kwargs = deepcopy(kwargs)
+        self.transform = transform
         self._setup()
 
     def _setup(self):
         self._cache = lmdb.open(path=self.cache_dir, map_size=self.map_size_gb * 1024**3, **self._kwargs)
 
     def __copy__(self):
-        out = CachedDataset(deepcopy(self.data), self.cache_dir, self.map_size_gb, **self._kwargs)
-        out.transform = deepcopy(self.transform)
-        return out
+        return CachedDataset(deepcopy(self.data), self.cache_dir, self.map_size_gb, deepcopy(self.transform), **deepcopy(self._kwargs))
 
     def __deepcopy__(self, *args):
         return self.__copy__()
