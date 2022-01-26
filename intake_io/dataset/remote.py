@@ -10,10 +10,11 @@ from .serialization import deserialize as _deserialize, serialize as _serialize
 
 class _RemoteDataset:
 
-    def __init__(self, hostname, port, key):
+    def __init__(self, hostname, port, key, data_name):
         self.hostname = hostname
         self.port = port
         self._key = key.encode()
+        self.data_name = data_name
         self.transform = None
         self._len = None
         self._socket = None
@@ -25,7 +26,7 @@ class _RemoteDataset:
         self._socket.connect(f"tcp://{self.hostname}:{self.port}")
 
     def __copy__(self):
-        out = _RemoteDataset(self.hostname, self.port, self._key.decode("utf8"))
+        out = _RemoteDataset(self.hostname, self.port, self._key.decode("utf8"), self.data_name)
         out.transform = deepcopy(self.transform)
         return out
 
@@ -34,7 +35,7 @@ class _RemoteDataset:
 
     def __getstate__(self):
         out = {k: getattr(self, k) for k in (
-            "hostname", "port", "_key", "transform", "_len", "_worker_ids"
+            "hostname", "port", "_key", "data_name", "transform", "_len", "_worker_ids"
         )}
         out["_socket"] = None
         return out
@@ -54,11 +55,14 @@ class _RemoteDataset:
             self._setup()
 
         socket = self._socket
-        socket.send_serialized(x, self.serialize)
+        socket.send_serialized((x, self.data_name), self.serialize)
         y = socket.recv_serialized(self.deserialize)
         if isinstance(y, Exception):
             raise y
-        elif self.transform is not None and x != "__len__":
+        elif x != "__len__":
+            return y
+
+        if self.transform is not None:
             y = self.transform(y)
         return y
 
@@ -79,13 +83,13 @@ class CachedRemoteDataset(CachedDataset):
     # Possibly intercept and store item before deserialization, or perhaps utilize the separate serializations by
     # optimizing separate serialization parameters for transport and caching.
 
-    def __init__(self, hostname, port, key, cache_dir, map_size_gb=1, **kwargs):
-        super().__init__(_RemoteDataset(hostname, port, key), cache_dir, map_size_gb=map_size_gb, **kwargs)
+    def __init__(self, hostname, port, key, data_name, cache_dir, map_size_gb=1, **kwargs):
+        super().__init__(_RemoteDataset(hostname, port, key, data_name), cache_dir, map_size_gb=map_size_gb, **kwargs)
 
 
 class DatasetServer:
 
-    def __init__(self, data, port, key, num_workers=4):
+    def __init__(self, datasets, port, key, num_workers=4):
         context = zmq.Context().instance()
 
         frontend = context.socket(zmq.ROUTER)
@@ -95,8 +99,8 @@ class DatasetServer:
         backend.bind("ipc://backend.ipc")
 
         with ProcessPoolExecutor(max_workers=num_workers) as pool:
-            for _ in range(num_workers):
-                pool.submit(DatasetWorker, data, key)
+            for i in range(num_workers):
+                pool.submit(DatasetWorker, i, datasets, key)
             try:
                 zmq.proxy(frontend, backend)
             except KeyboardInterrupt:
@@ -109,24 +113,24 @@ class DatasetServer:
 
 class DatasetWorker:
 
-    def __init__(self, data, key):
+    def __init__(self, i, datasets, key):
         self._key = key.encode()
         context = zmq.Context.instance()
         socket = context.socket(zmq.REP)
         socket.connect("ipc://backend.ipc")
 
-        print("DatasetWorker started")
+        print(f"DatasetWorker {i} started")
 
         try:
             while True:
                 try:
-                    x = socket.recv_serialized(self.deserialize)
+                    x, name = socket.recv_serialized(self.deserialize)
                     if x == "__stop__":
                         break
                     elif x == "__len__":
-                        y = len(data)
+                        y = len(datasets[name])
                     else:
-                        y = data[x]
+                        y = datasets[name][x]
                 except Exception as ex:
                     y = ex
                 socket.send_serialized(y, self.serialize)
@@ -141,5 +145,5 @@ class DatasetWorker:
         return _serialize(x, self._key, maxsize=50 * 1024 ** 2, cname="zlib", clevel=4)
 
 
-def start_server(data, *args, **kwargs):
-    return DatasetServer(data, *args, **kwargs)
+def start_server(datasets, *args, **kwargs):
+    return DatasetServer(datasets, *args, **kwargs)
